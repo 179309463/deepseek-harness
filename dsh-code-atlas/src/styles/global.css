@@ -385,7 +385,7 @@ body::after {
     position: relative;
     border: none;
     border-bottom: 1px solid var(--color-line);
-    padding: 0.38rem 0.7rem 0.38rem 6.5rem;
+    padding: 0.38rem 0.7rem 0.38rem 7.25rem;
     vertical-align: middle;
   }
 
@@ -402,13 +402,16 @@ body::after {
     position: absolute;
     left: 0.7rem;
     top: 50%;
-    width: 5.5rem;
+    width: max-content;
+    max-width: none;
     margin: 0;
     font-size: 0.65rem;
     font-weight: 800;
     letter-spacing: 0;
     line-height: 1.35;
     color: var(--color-dora-deep);
+    white-space: nowrap;
+    word-break: keep-all;
     transform: translateY(-50%);
   }
 
