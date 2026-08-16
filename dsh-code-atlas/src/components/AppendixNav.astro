@@ -17,11 +17,41 @@ const links = [
     <a
       href={l.href}
       class:list={[
-        'comic-card px-4 py-2 text-sm font-bold transition hover:-translate-y-0.5',
-        l.key === current ? 'bg-dora text-white' : 'bg-card text-dora-deep hover:bg-mist',
+        'appendix-tab',
+        l.key === current ? 'appendix-tab-on' : 'appendix-tab-off',
       ]}
     >
       {l.label}
     </a>
   ))}
 </nav>
+
+<style>
+  .appendix-tab {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    border-radius: 16px;
+    border: 1px solid #d5e3f0;
+    box-shadow: 0 10px 28px rgba(27, 95, 170, 0.06);
+    text-decoration: none;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+  }
+  .appendix-tab:hover {
+    transform: translateY(-2px);
+  }
+  .appendix-tab-on {
+    background: #2b9fe3;
+    border-color: #2b9fe3;
+    color: #fff;
+    -webkit-text-fill-color: #fff;
+  }
+  .appendix-tab-off {
+    background: #fff;
+    color: #1b5faa;
+  }
+  .appendix-tab-off:hover {
+    background: #eef4fa;
+  }
+</style>
