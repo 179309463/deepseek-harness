@@ -11,7 +11,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "start": "serve -s dist -l ${PORT:-3000}",
+    "start": "serve dist -c dist/serve.json -l ${PORT:-3000}",
     "verify": "node scripts/verify-codewalks.mjs"
   },
   "dependencies": {
