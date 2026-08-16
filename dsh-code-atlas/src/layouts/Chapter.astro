@@ -33,27 +33,26 @@ const heroAlt = HERO_ALT[num] ?? `第 ${num} 章特色配图`;
 <Base title={`第 ${num} 章 · ${title}`}>
   <article class="prose-atlas mx-auto w-full">
     <header class="comic-card mb-10 overflow-hidden">
-      <div class="relative bg-paper">
-        <img
-          src={heroSrc}
-          alt={heroAlt}
-          fetchpriority="high"
-          decoding="async"
-          class="block aspect-[16/7] w-full object-cover md:aspect-[21/8]"
-        />
-        <span class="absolute top-4 left-5 flex h-14 w-14 rotate-[-4deg] items-center justify-center rounded-[18px_22px_19px_23px] border-2 border-dora-deep bg-card text-xl font-extrabold text-dora-deep shadow-[3px_4px_0_rgba(27,95,170,0.18)]">
-          {num}
-        </span>
-        <span class="absolute right-5 bottom-4 rounded-[11px_14px_12px_15px] border-2 border-dora-deep bg-card/95 px-3 py-1 text-[11px] font-extrabold text-dora-deep shadow-[2px_3px_0_rgba(27,95,170,0.16)]">
-          本章特色配图
-        </span>
+      <div class="grid md:grid-cols-[1.02fr_0.98fr]">
+        <div class="chapter-hero flex flex-col justify-center bg-gradient-to-br from-dora to-dora-deep px-6 py-9 text-white md:px-9 md:py-11">
+          <div class="flex items-center gap-3">
+            <span class="flex h-11 w-11 shrink-0 rotate-[-4deg] items-center justify-center rounded-[14px_18px_15px_19px] border-2 border-white/70 bg-white/15 text-lg font-extrabold">{num}</span>
+            <span class="text-sm font-bold tracking-widest opacity-80">第 {num} 章</span>
+          </div>
+          <h1 class="text-3xl font-extrabold leading-tight md:text-4xl">{title}</h1>
+          <p class="max-w-xl text-white/90">{subtitle}</p>
+        </div>
+        <div class="bg-paper">
+          <img
+            src={heroSrc}
+            alt={heroAlt}
+            fetchpriority="high"
+            decoding="async"
+            class="block aspect-[16/9] w-full object-cover"
+          />
+        </div>
       </div>
-      <div class="chapter-hero border-y-2 border-dora-deep bg-dora text-white">
-        <div class="text-sm font-bold tracking-widest opacity-80">第 {num} 章</div>
-        <h1 class="text-3xl font-extrabold">{title}</h1>
-        <p class="text-white/90">{subtitle}</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 bg-card px-6 py-3 text-xs text-ink/60">
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 border-t-2 border-dora-deep bg-card px-6 py-3 text-xs text-ink/60 md:px-9">
         <span>阅读姿势：先看漫画条进入剧情 → 跟架构图与意象图建立全局 → 逐个 CodeWalk 精读真实代码 → 动手实验验证</span>
       </div>
     </header>

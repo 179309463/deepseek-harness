@@ -1,0 +1,15 @@
+---
+interface Props {
+  /** 双图共用的一句对照说明，默认点出左右分工 */
+  note?: string;
+}
+
+const { note = '同一件事：左图讲机制，右图讲意象' } = Astro.props;
+---
+
+<div class="diagram-duo">
+  <div class="diagram-duo-stage">
+    <slot />
+  </div>
+  {note ? <p class="diagram-duo-note">{note}</p> : null}
+</div>

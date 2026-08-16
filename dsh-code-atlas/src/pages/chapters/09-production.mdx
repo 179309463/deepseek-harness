@@ -5,6 +5,7 @@ import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
 import ArtFigure from '../../components/ArtFigure.astro';
+import DiagramPair from '../../components/DiagramPair.astro';
 
 <Chapter
   num="09"
@@ -22,6 +23,7 @@ import ArtFigure from '../../components/ArtFigure.astro';
 
 ## 本章源码地图
 
+<DiagramPair>
 <MermaidDiagram title="两条协议线与一套质检流水线" caption="ACP 与 SDK 是两种方言，共用 JsonRpcLineTransport 这根水管；gates 在仓库边界把关">
   flowchart TB
     subgraph CLIENTS["外部世界"]
@@ -50,13 +52,12 @@ import ArtFigure from '../../components/ArtFigure.astro';
     SRV --> AGENTS
     GATES -.把关.-> CORE
 </MermaidDiagram>
-
 <ArtFigure
   src="/art/ch09-art.webp"
   alt="第 09 章意象图：两根管道汇合成一条主管，接进一排三个检查工位的流水线，末端小车推走成品，橙色箭头首尾相连"
   caption="两根管道是 ACP 与 JSON-RPC 两套协议入口，三个工位是仓库 gates：快照、类型、lint 全过了才准出厂。"
-  pairWith="上图讲机制，下图讲同一件事"
 />
+</DiagramPair>
 
 | 文件 | 关键行 | 本章要回答的问题 |
 |---|---|---|

@@ -8,15 +8,17 @@ const { title, caption } = Astro.props;
 ---
 
 <figure class="mermaid-frame">
-  {title && (
-    <figcaption class="mb-2 flex items-center gap-2 font-bold text-dora-deep">
-      <span class="inline-block h-3 w-3 rounded-full bg-accent"></span>
-      {title}
-    </figcaption>
-  )}
+  <figcaption class="mermaid-head">
+    {title ? (
+      <span class="mermaid-title">
+        <span class="inline-block h-3 w-3 shrink-0 rounded-full bg-accent"></span>
+        {title}
+      </span>
+    ) : <span></span>}
+  </figcaption>
   <pre class="mermaid-source hidden"><slot /></pre>
   <div class="mermaid-render" aria-label={title ?? '架构图'}></div>
-  {caption && <p class="mt-2 text-center text-sm text-ink/60">{caption}</p>}
+  {caption && <p class="mermaid-caption mt-2 text-center text-sm text-ink/60">{caption}</p>}
 </figure>
 
 <script>
@@ -40,6 +42,7 @@ const { title, caption } = Astro.props;
       signalTextColor: '#222222',
       noteBkgColor: '#fff7f0',
       noteBorderColor: '#ff8c42',
+      sequenceNumberColor: '#ffffff',
       fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
       fontSize: '14px',
     },
@@ -55,6 +58,141 @@ const { title, caption } = Astro.props;
     return clone.textContent?.trim() ?? '';
   }
 
+  // mermaid 默认带死宽高，容器一变就会裁切。先剥掉固有尺寸，后面按容器再算缩放。
+  function fixSize(target: Element): void {
+    const svg = target.querySelector('svg');
+    if (!svg) return;
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+    svg.removeAttribute('style');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.style.height = 'auto';
+    svg.style.display = 'block';
+    svg.style.margin = '0 auto';
+  }
+
+  // Mermaid 时序号默认是 r=6 的圆 + 12px 字，整图一缩放就糊成黑点。
+  // 圆和字都放大，并把字的基线改成垂直居中，避免加大字号后数字偏出圆外。
+  function fixSequenceBadges(target: Element): void {
+    const svg = target.querySelector('svg');
+    if (!svg) return;
+    for (const marker of svg.querySelectorAll('marker[id$="-sequencenumber"]')) {
+      marker.setAttribute('markerUnits', 'userSpaceOnUse');
+      marker.setAttribute('markerWidth', '36');
+      marker.setAttribute('markerHeight', '36');
+      const circle = marker.querySelector('circle');
+      if (circle) circle.setAttribute('r', '11');
+    }
+    for (const text of svg.querySelectorAll('text.sequenceNumber')) {
+      const y = Number.parseFloat(text.getAttribute('y') ?? '0');
+      text.setAttribute('y', String(y - 4));
+      text.setAttribute('dominant-baseline', 'central');
+      text.setAttribute('font-size', '13px');
+      text.setAttribute('font-weight', '800');
+      text.removeAttribute('textLength');
+    }
+  }
+
+  // 所有 UML 都按容器适应宽高；缩放条在标题右侧。zoom=1 表示刚好铺满当前可视区域。
+  function bindZoom(frame: HTMLElement, target: HTMLElement): void {
+    const svg = target.querySelector<SVGSVGElement>('svg');
+    if (!svg || frame.querySelector('.mermaid-zoom-bar')) return;
+
+    const nativeW = svg.viewBox.baseVal.width || svg.getBoundingClientRect().width;
+    const nativeH = svg.viewBox.baseVal.height || svg.getBoundingClientRect().height;
+    let zoom = 1;
+
+    const bar = document.createElement('div');
+    bar.className = 'mermaid-zoom-bar';
+    bar.innerHTML = `
+      <button type="button" data-act="out" aria-label="缩小">−</button>
+      <span class="mermaid-zoom-label" data-label>100%</span>
+      <button type="button" data-act="in" aria-label="放大">+</button>
+      <button type="button" data-act="fit">适应</button>
+      <button type="button" data-act="expand">展开</button>
+    `;
+    const head = frame.querySelector('.mermaid-head') ?? frame;
+    head.append(bar);
+
+    const label = bar.querySelector('[data-label]');
+    const expandBtn = bar.querySelector('[data-act="expand"]');
+
+    const fitScale = (): number => {
+      const availW = target.clientWidth;
+      const maxH = getComputedStyle(target).maxHeight;
+      const availH = maxH !== 'none' ? target.clientHeight : Number.POSITIVE_INFINITY;
+      const byW = nativeW > 0 && availW > 0 ? availW / nativeW : 1;
+      const byH = nativeH > 0 && Number.isFinite(availH) && availH > 0 ? availH / nativeH : 1;
+      return Math.min(1, byW, byH);
+    };
+
+    const apply = () => {
+      svg.style.maxWidth = 'none';
+      svg.style.width = `${Math.max(nativeW * fitScale() * zoom, 1)}px`;
+      svg.style.height = 'auto';
+      if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+    };
+
+    const setZoom = (next: number) => {
+      zoom = Math.min(3, Math.max(0.75, Math.round(next * 100) / 100));
+      apply();
+    };
+
+    const closeExpand = () => {
+      frame.classList.remove('is-expanded');
+      document.getElementById('mermaid-zoom-scrim')?.remove();
+      document.body.style.removeProperty('overflow');
+      if (expandBtn) expandBtn.textContent = '展开';
+      requestAnimationFrame(apply);
+    };
+
+    const openExpand = () => {
+      if (document.getElementById('mermaid-zoom-scrim')) return;
+      const scrim = document.createElement('div');
+      scrim.id = 'mermaid-zoom-scrim';
+      scrim.className = 'mermaid-zoom-scrim';
+      scrim.addEventListener('click', closeExpand);
+      document.body.append(scrim);
+      document.body.style.overflow = 'hidden';
+      frame.classList.add('is-expanded');
+      if (expandBtn) expandBtn.textContent = '收起';
+      zoom = 1;
+      requestAnimationFrame(apply);
+    };
+
+    bar.addEventListener('click', (event) => {
+      const btn = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === 'in') setZoom(zoom + 0.25);
+      else if (act === 'out') setZoom(zoom - 0.25);
+      else if (act === 'fit') setZoom(1);
+      else if (act === 'expand') {
+        if (frame.classList.contains('is-expanded')) closeExpand();
+        else openExpand();
+      }
+    });
+
+    target.addEventListener(
+      'wheel',
+      (event) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        setZoom(zoom + (event.deltaY < 0 ? 0.25 : -0.25));
+      },
+      { passive: false },
+    );
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && frame.classList.contains('is-expanded')) closeExpand();
+    });
+
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(target);
+    ro.observe(frame);
+    requestAnimationFrame(apply);
+  }
+
   // 渲染必须留在异步 IIFE 里，不能用顶层 await：生产构建下 mermaid 懒加载的图表 chunk 会反向 import
   // 本脚本所在的入口 chunk，若入口模块的顶层 await 未结束，那些 chunk 就永远无法求值，双方死锁。
   void (async () => {
@@ -68,6 +206,9 @@ const { title, caption } = Astro.props;
       try {
         const { svg } = await mermaid.render(`atlas-mmd-${seq++}`, code);
         target.innerHTML = svg;
+        fixSize(target);
+        fixSequenceBadges(target);
+        bindZoom(frame, target);
       } catch (err) {
         target.innerHTML = `<p style="color:#e5534b;font-size:0.85rem">图表渲染失败：${String(err)}</p>`;
       }

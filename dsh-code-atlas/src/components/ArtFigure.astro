@@ -8,19 +8,15 @@ interface Props {
   caption: string;
   /** 左上角胶带标签，默认「意象图」 */
   label?: string;
-  /** 与上方 UML 图并置时，在插画上方画一条虚线连接标记 */
-  pairWith?: string;
   /** 画面比例，宽屏 hero 用 21/9，章节意象图用 3/2 */
   ratio?: 'wide' | 'plate';
 }
 
-const { src, alt, caption, label = '意象图', pairWith, ratio = 'plate' } = Astro.props;
+const { src, alt, caption, label = '意象图', ratio = 'plate' } = Astro.props;
 const aspect = ratio === 'wide' ? 'aspect-[21/9]' : 'aspect-[3/2]';
 ---
 
-{pairWith ? <div class="art-pair-link">{pairWith}</div> : null}
-
-<figure class="my-7">
+<figure class="art-figure">
   <div class="art-frame tape-top relative">
     <span class="absolute top-3 left-4 z-[3] rounded-[10px_13px_11px_14px] border-2 border-dora-deep bg-card px-2.5 py-1 text-[11px] font-extrabold text-dora-deep shadow-[2px_3px_0_rgba(27,95,170,0.16)]">
       {label}

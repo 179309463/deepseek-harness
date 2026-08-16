@@ -153,11 +153,6 @@ const appendixLinks = [
             九章绘本式精读，把 deepseek-harness 的插件宇宙从内核讲到生产线。
             每一句论断都锚定仓库里的真实代码，每一章都配一幅手绘意象图陪着 UML 一起看。
           </p>
-          <p class="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
-            <span class="rounded-[9px_12px_10px_13px] border-2 border-dora-deep/35 bg-mist px-2 py-0.5 text-dora-deep">亮白模式限定</span>
-            <span class="rounded-[9px_12px_10px_13px] border-2 border-dora-deep/35 bg-blush px-2 py-0.5 text-ink/75">全站中文</span>
-            <span class="rounded-[9px_12px_10px_13px] border-2 border-dora-deep/35 bg-card px-2 py-0.5 text-ink/65">丝网印刷绘本风</span>
-          </p>
         </div>
 
         <div>
@@ -188,9 +183,6 @@ const appendixLinks = [
               <a href="/" class="text-ink/70 transition-colors hover:text-dora-deep hover:underline hover:decoration-wavy hover:decoration-accent">回到全站地图</a>
             </li>
           </ul>
-          <p class="mt-4 text-xs leading-relaxed text-ink/50">
-            配图由文生图生成，与漫画 PPT、短视频同源不同风：这里走的是纸感绘本。
-          </p>
         </div>
       </div>
 
@@ -208,12 +200,18 @@ const appendixLinks = [
           <span>DSH 源码图鉴</span>
           <span aria-hidden="true" class="text-accent">◆</span>
           <span>基于 deepseek-harness 仓库真实源码撰写</span>
-          <span aria-hidden="true" class="text-accent">◆</span>
-          <span>亮白模式限定，永不切换暗黑</span>
-          <span aria-hidden="true" class="text-accent">◆</span>
-          <span>部署于 Railway</span>
         </div>
       </div>
     </footer>
+    <script is:inline>
+      document.querySelectorAll('.prose-atlas table').forEach((table) => {
+        const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+        table.querySelectorAll('tbody tr').forEach((tr) => {
+          [...tr.children].forEach((td, i) => {
+            if (heads[i]) td.setAttribute('data-label', heads[i]);
+          });
+        });
+      });
+    </script>
   </body>
 </html>

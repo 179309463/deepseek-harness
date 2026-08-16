@@ -58,13 +58,13 @@ const chapters = [
   </section>
 
   <h2 class="section-title mb-4 text-2xl font-extrabold">全站源码地图</h2>
-  <MermaidDiagram title="dsh 架构分层与章节对照" caption="箭头是依赖方向；从下往上读，Cordis 内核是地基，能力 seam 是装备，协议层是对外的桥">
-    flowchart TB
-      L3["协议与装配层（第 6、9 章）<br/>packages/acp · packages/sdk · packages/boot/app-boot"]
-      L2["能力层（第 3、7、8 章）<br/>shell seam · subagent seam · compaction · extensions/tool-cordis"]
-      L1["产品脊柱（第 4、5 章）<br/>core/agent-loop · core/session · core/tools"]
-      L0["Cordis 内核（第 1、2 章）<br/>vendor/cordis · vendor/loader"]
-      L3 --> L2 --> L1 --> L0
+  <MermaidDiagram title="dsh 架构分层与章节对照" caption="从左往右读：Cordis 内核是地基，产品脊柱是主干，能力 seam 是装备，协议层是对外的桥；箭头指向依赖它的那一层">
+    flowchart LR
+      L0["Cordis 内核<br/>第 1、2 章<br/>vendor/cordis<br/>vendor/loader"]
+      L1["产品脊柱<br/>第 4、5 章<br/>core/agent-loop<br/>core/session<br/>core/tools"]
+      L2["能力层<br/>第 3、7、8 章<br/>shell seam<br/>subagent seam<br/>compaction<br/>tool-cordis"]
+      L3["协议与装配层<br/>第 6、9 章<br/>packages/acp<br/>packages/sdk<br/>boot/app-boot"]
+      L0 --> L1 --> L2 --> L3
   </MermaidDiagram>
 
   <h2 class="section-title section-title-accent mb-4 mt-14 text-2xl font-extrabold">九章之旅</h2>

@@ -31,12 +31,18 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
           <span class="rounded bg-dora px-1.5 py-0.5 text-[10px] font-bold" style="color:#fff;-webkit-text-fill-color:#fff">① 源码</span>
           先读这段真实代码
         </div>
-        <div class="code-frame" style={`--line-start: ${lineStart}`}>
+        <div class="code-frame" data-wrap="on" style={`--line-start: ${lineStart}`}>
           <div class="flex items-center gap-1.5 border-b border-[#e4eef6] bg-[#eaeff5] px-3 py-1.5">
             <span class="h-2.5 w-2.5 rounded-full bg-[#ff5f57]"></span>
             <span class="h-2.5 w-2.5 rounded-full bg-[#febc2e]"></span>
             <span class="h-2.5 w-2.5 rounded-full bg-[#28c840]"></span>
             <span class="ml-2 truncate font-mono text-[11px] text-ink/50">{file}{lines && `:${lines}`}</span>
+            <button
+              type="button"
+              class="code-wrap-toggle ml-auto shrink-0 cursor-pointer rounded-[7px_9px_7px_9px] border border-dora-deep/25 bg-card px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink/55 transition-colors hover:border-dora-deep/55 hover:text-dora-deep"
+              aria-pressed="true"
+              title="关掉后长行不再折行，改由代码窗横向滚动"
+            >自动换行：开</button>
           </div>
           <slot name="code" />
         </div>
@@ -85,9 +91,30 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
     font-size: 0.78em;
     user-select: none;
   }
+
+  /* 关掉自动换行：长行保持原样，宽度撑到 max-content，代码窗才算得出横向滚动距离。 */
+  :global(.code-frame[data-wrap='off'] pre code .line) {
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+    width: max-content;
+    min-width: 100%;
+  }
 </style>
 
 <script>
+  // 代码窗右上角的自动换行开关：只作用于本窗，关掉后长行由 pre 自己横向滚动。
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('.code-wrap-toggle')) {
+    const frame = btn.closest<HTMLElement>('.code-frame');
+    if (!frame) continue;
+    btn.addEventListener('click', () => {
+      const wrapping = frame.dataset.wrap !== 'off';
+      frame.dataset.wrap = wrapping ? 'off' : 'on';
+      btn.setAttribute('aria-pressed', String(!wrapping));
+      btn.textContent = wrapping ? '自动换行：关' : '自动换行：开';
+    });
+  }
+
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const BLOCK_SEL = ':scope > p, :scope > ol > li, :scope > ul > li, :scope > blockquote, :scope > h2, :scope > h3, :scope > h4';
   const gens = new WeakMap<HTMLElement, number>();

@@ -5,6 +5,7 @@ import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
 import ArtFigure from '../../components/ArtFigure.astro';
+import DiagramPair from '../../components/DiagramPair.astro';
 
 <Chapter
   num="07"
@@ -23,6 +24,7 @@ import ArtFigure from '../../components/ArtFigure.astro';
 
 ## 本章源码地图
 
+<DiagramPair>
 <MermaidDiagram title="subagent 能力接缝三角色" caption="Consumer 把分身术包装成模型工具；Service Definition 管注册与校验；Provider 决定孩子在哪个世界出生">
   flowchart TB
     subgraph CONSUMER["Consumer：tool-subagent"]
@@ -43,13 +45,12 @@ import ArtFigure from '../../components/ArtFigure.astro';
     RT --> FORK
     RT --> ACP
 </MermaidDiagram>
-
 <ArtFigure
   src="/art/ch07-art.webp"
   alt="第 07 章意象图：三扇拱门前站着一组由大到小的俄罗斯套娃，最右侧门内是一座发光的浮空岛，门前拉着栏杆"
   caption="套娃是父 agent 和它的分身，一层套一层；栏杆就是 maxDepth——套到规定层数就不许再往里套。"
-  pairWith="上图讲机制，下图讲同一件事"
 />
+</DiagramPair>
 
 | 文件 | 关键行 | 本章要回答的问题 |
 |---|---|---|

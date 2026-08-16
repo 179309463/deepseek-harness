@@ -117,19 +117,19 @@ body::after {
   box-shadow: var(--sticker-sm);
 }
 
-.bubble-other {
+.bubble-left {
   border-top-left-radius: 4px;
 }
 
-.bubble-mine {
+.bubble-right {
   background: #fff3e8;
   border-color: #e08340;
   border-top-right-radius: 4px;
   box-shadow: var(--sticker-accent);
 }
 
-.bubble-other::before,
-.bubble-mine::before {
+.bubble-left::before,
+.bubble-right::before {
   content: "";
   position: absolute;
   top: 15px;
@@ -140,13 +140,13 @@ body::after {
   transform: rotate(45deg);
 }
 
-.bubble-other::before {
+.bubble-left::before {
   left: -6px;
   border-right: none;
   border-top: none;
 }
 
-.bubble-mine::before {
+.bubble-right::before {
   right: -6px;
   border-left: none;
   border-bottom: none;
@@ -178,6 +178,15 @@ body::after {
   counter-reset: line;
   display: flex;
   flex-direction: column;
+}
+
+/* 自动换行关掉时改成横向滚动；行不再被拉伸到容器宽，否则量不出真实行宽。 */
+.code-frame[data-wrap='off'] pre {
+  overflow-x: auto !important;
+}
+
+.code-frame[data-wrap='off'] pre code {
+  align-items: flex-start;
 }
 
 /* 标题装饰：蜡笔波浪下划线（替代规整的直线边框） */
@@ -307,13 +316,73 @@ body::after {
   background: rgba(250, 246, 238, 0.75);
 }
 
-/* 窄屏下宽表格自己横向滚动，不把整个页面顶宽 */
+/* 窄屏：每行变成一张卡片，表头落到每张卡的字段标签上 */
 @media (max-width: 640px) {
   .prose-atlas table {
     display: block;
-    width: max-content;
-    max-width: 100%;
-    overflow-x: auto;
+    width: 100%;
+    max-width: none;
+    overflow: visible;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .prose-atlas thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .prose-atlas tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .prose-atlas tr {
+    display: block;
+    background: var(--color-card);
+    border: 2px solid var(--color-dora-deep);
+    border-radius: var(--wobble-sm);
+    box-shadow: var(--sticker-sm);
+    overflow: hidden;
+  }
+
+  .prose-atlas tbody tr:nth-child(even) td {
+    background: transparent;
+  }
+
+  .prose-atlas td {
+    display: block;
+    border: none;
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.7rem 0.9rem;
+  }
+
+  .prose-atlas td:first-child {
+    background: var(--color-mist);
+  }
+
+  .prose-atlas td:last-child {
+    border-bottom: none;
+  }
+
+  .prose-atlas td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.28rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--color-dora-deep);
   }
 }
 
@@ -343,6 +412,10 @@ body::after {
 }
 
 /* 章节内的插画卡与横幅共用的手绘边框 */
+.art-figure {
+  margin: 1.75rem 0;
+}
+
 .art-frame {
   border: var(--edge);
   border-radius: var(--wobble);
@@ -466,47 +539,59 @@ body::after {
   -webkit-text-fill-color: #ffffff !important;
 }
 
-/* 章节头：压过 .prose-atlas 的 h1/p 外边距，上下内边距对称 */
-.chapter-hero {
-  padding: 1.5rem 1.5rem;
-}
-
+/* 章头蓝面板：标题与副标题的间距由这里给，不用 prose 的默认段距 */
 .chapter-hero h1,
 .chapter-hero p {
   margin: 0;
 }
 
 .chapter-hero h1 {
-  margin-top: 0.35rem;
+  margin-top: 0.6rem;
 }
 
 .chapter-hero p {
-  margin-top: 0.5rem;
+  margin-top: 1rem;
 }
 
 /* Mermaid 容器：纸卡 + 手绘边 + 顶部胶带 */
 .mermaid-frame {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: var(--color-card);
   border: var(--edge);
   border-radius: var(--wobble);
   box-shadow: var(--sticker);
   padding: 1.3rem 1.2rem 1.1rem;
   margin: 1.6rem 0;
-  overflow-x: auto;
+  overflow: hidden;
 }
 
-/* mermaid 给 svg 写的是 width="100%"，会把一张 300px 宽的图等比拉到卡片宽度，高度随之失控；
-   回到 viewBox 固有尺寸居中显示，只在图比容器宽时才缩小。 */
+.mermaid-render {
+  width: 100%;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .mermaid-frame svg {
-  width: auto;
   height: auto;
-  max-width: 100%;
-  margin: 0 auto;
   display: block;
+  margin: 0 auto;
 }
 
-/* UML 与意象插画并置时，两块之间的连接标记 */
+/* 时序图步骤号：白字压在深蓝圆上，压过 Mermaid 默认的低对比色 */
+.mermaid-frame text.sequenceNumber {
+  fill: #fff;
+  font-weight: 800;
+}
+
+.mermaid-frame marker[id$="-sequencenumber"] circle {
+  fill: #1b5faa;
+}
+
+/* 章节导航前后的虚线分隔（与双图并置无关） */
 .art-pair-link {
   display: flex;
   align-items: center;
@@ -524,4 +609,157 @@ body::after {
   height: 0;
   flex: 1;
   border-top: 2.5px dotted var(--color-line);
+}
+
+/* UML 与意象图：宽屏左右对读，窄屏才上下叠 */
+.diagram-duo {
+  margin: 1.6rem 0 2rem;
+}
+
+.diagram-duo-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: 1.15rem;
+  align-items: start;
+}
+
+.diagram-duo-stage > :first-child {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.diagram-duo-stage > :last-child {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.diagram-duo .mermaid-frame,
+.diagram-duo .art-figure {
+  margin: 0;
+}
+
+.diagram-duo .mermaid-frame {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.diagram-duo .mermaid-render {
+  overflow: auto;
+  max-height: min(28rem, 62vh);
+  overscroll-behavior: contain;
+}
+
+.mermaid-head {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.mermaid-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: var(--color-dora-deep);
+}
+
+.mermaid-zoom-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.mermaid-zoom-bar button {
+  min-width: 1.85rem;
+  height: 1.85rem;
+  padding: 0 0.55rem;
+  border: var(--edge);
+  border-radius: 10px 12px 11px 13px;
+  background: var(--color-card);
+  color: var(--color-dora-deep);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: var(--sticker-sm);
+  cursor: pointer;
+}
+
+.mermaid-zoom-bar button:hover {
+  background: var(--color-mist);
+}
+
+@media (max-width: 640px) {
+  .mermaid-zoom-bar [data-act="in"],
+  .mermaid-zoom-bar [data-act="out"],
+  .mermaid-zoom-label {
+    display: none;
+  }
+}
+
+.mermaid-zoom-label {
+  min-width: 3.1rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--color-dora-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.mermaid-zoom-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  background: rgba(34, 50, 67, 0.38);
+}
+
+.mermaid-frame.is-expanded {
+  position: fixed;
+  inset: 1.2rem;
+  z-index: 80;
+  margin: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mermaid-frame.is-expanded .mermaid-render {
+  flex: 1;
+  max-height: none;
+}
+
+.diagram-duo-note {
+  margin: 0.7rem 0 0;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(34, 50, 67, 0.5);
+}
+
+@media (max-width: 860px) {
+  .diagram-duo-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .diagram-duo-stage > :first-child,
+  .diagram-duo-stage > :last-child {
+    grid-column: 1;
+  }
+
+  .diagram-duo-stage > :first-child {
+    grid-row: 1;
+  }
+
+  .diagram-duo-stage > :last-child {
+    grid-row: 2;
+  }
 }
