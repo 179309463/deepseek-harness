@@ -307,6 +307,16 @@ body::after {
   background: rgba(250, 246, 238, 0.75);
 }
 
+/* 窄屏下宽表格自己横向滚动，不把整个页面顶宽 */
+@media (max-width: 640px) {
+  .prose-atlas table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
 /* 引用块：便利贴 + 折角 */
 .prose-atlas blockquote {
   position: relative;

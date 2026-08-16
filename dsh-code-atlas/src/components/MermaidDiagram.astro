@@ -47,6 +47,14 @@ const { title, caption } = Astro.props;
     sequence: { showSequenceNumbers: true, actorMargin: 60 },
   });
 
+  // Astro/MDX 会把图源里的 <br/> 解析成真正的 <br> 元素，textContent 取不到换行，标签文字会粘成一团；
+  // 还原成字面量 `<br/>`，mermaid 在 htmlLabels 下自己把它当换行处理。
+  function readSource(source: Element): string {
+    const clone = source.cloneNode(true) as Element;
+    for (const br of clone.querySelectorAll('br')) br.replaceWith('<br/>');
+    return clone.textContent?.trim() ?? '';
+  }
+
   // 渲染必须留在异步 IIFE 里，不能用顶层 await：生产构建下 mermaid 懒加载的图表 chunk 会反向 import
   // 本脚本所在的入口 chunk，若入口模块的顶层 await 未结束，那些 chunk 就永远无法求值，双方死锁。
   void (async () => {
@@ -55,7 +63,7 @@ const { title, caption } = Astro.props;
       const source = frame.querySelector('.mermaid-source');
       const target = frame.querySelector('.mermaid-render');
       if (!source || !target) continue;
-      const code = source.textContent?.trim() ?? '';
+      const code = readSource(source);
       if (!code) continue;
       try {
         const { svg } = await mermaid.render(`atlas-mmd-${seq++}`, code);
