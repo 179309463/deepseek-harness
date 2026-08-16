@@ -45,7 +45,7 @@ const appendixLinks = [
     <title>{title} · DSH 源码图鉴</title>
   </head>
   <body class="min-h-screen flex flex-col">
-    <header class="border-b-2 border-dora-deep bg-paper md:sticky md:top-0 md:z-40 md:bg-paper/95 md:backdrop-blur">
+    <header class="relative z-40 border-b-2 border-dora-deep bg-paper md:sticky md:top-0 md:bg-paper/95 md:backdrop-blur">
       <div class="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 md:gap-4 md:px-4">
         <a href="/" class="group flex min-w-0 items-center gap-2.5">
           <img src="/art/mascot.webp" alt="源码图鉴吉祥物：蓝色小机器猫工程师" width="48" height="48" class="h-12 w-12 shrink-0 object-cover transition-transform group-hover:-rotate-6" />
@@ -98,11 +98,11 @@ const appendixLinks = [
             附录
           </a>
         </nav>
-        <details class="relative ml-auto md:hidden">
+        <details class="relative z-50 ml-auto md:hidden">
           <summary class="cursor-pointer whitespace-nowrap rounded-[13px_16px_14px_17px] border-2 border-dora-deep bg-card px-2.5 py-1.5 text-xs font-bold shadow-[3px_3px_0_rgba(27,95,170,0.14)]">
             {currentChapter ? `${currentChapter.num} ${currentChapter.title}` : inAppendix ? '附录' : '章节'}
           </summary>
-          <div class="absolute right-0 mt-3 w-56 comic-card p-2">
+          <div class="absolute right-0 z-50 mt-3 w-56 comic-card p-2">
             {chapters.map((c) => (
               <a
                 href={`/chapters/${c.slug}`}

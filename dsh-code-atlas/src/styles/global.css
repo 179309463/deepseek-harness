@@ -326,17 +326,19 @@ body::after {
   background: rgba(250, 246, 238, 0.75);
 }
 
-/* 窄屏：每行变成一张卡片，表头落到每张卡的字段标签上 */
+/* 窄屏：每行变成一张卡片，表头落到每张卡的字段标签上；标签与值同一行以压高度 */
 @media (max-width: 640px) {
   .prose-atlas table {
     display: block;
     width: 100%;
     max-width: none;
+    margin: 0.85rem 0;
     overflow: visible;
     border: none;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    font-size: 0.82rem;
   }
 
   .prose-atlas thead {
@@ -354,7 +356,7 @@ body::after {
   .prose-atlas tbody {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.5rem;
   }
 
   .prose-atlas tr {
@@ -371,10 +373,13 @@ body::after {
   }
 
   .prose-atlas td {
-    display: block;
+    display: grid;
+    grid-template-columns: 5.6em minmax(0, 1fr);
+    align-items: start;
+    column-gap: 0.5rem;
     border: none;
     border-bottom: 1px solid var(--color-line);
-    padding: 0.7rem 0.9rem;
+    padding: 0.4rem 0.7rem;
   }
 
   .prose-atlas td:first-child {
@@ -387,12 +392,13 @@ body::after {
 
   .prose-atlas td::before {
     content: attr(data-label);
-    display: block;
-    margin-bottom: 0.28rem;
-    font-size: 0.72rem;
+    margin: 0;
+    font-size: 0.68rem;
     font-weight: 800;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
+    line-height: 1.45;
     color: var(--color-dora-deep);
+    white-space: nowrap;
   }
 }
 

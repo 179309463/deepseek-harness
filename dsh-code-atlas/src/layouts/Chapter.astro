@@ -32,15 +32,15 @@ const heroAlt = HERO_ALT[num] ?? `第 ${num} 章特色配图`;
 
 <Base title={`第 ${num} 章 · ${title}`}>
   <article class="prose-atlas mx-auto w-full">
-    <header class="comic-card mb-10 overflow-hidden">
+    <header class="comic-card mb-8 overflow-hidden md:mb-10">
       <div class="grid md:grid-cols-[1.02fr_0.98fr]">
         <div class="chapter-hero flex flex-col justify-center bg-gradient-to-br from-dora to-dora-deep px-5 py-4 text-white md:px-9 md:py-11">
-          <div class="flex items-center gap-2.5 md:gap-3">
-            <span class="flex h-9 w-9 shrink-0 rotate-[-4deg] items-center justify-center rounded-[12px_15px_13px_16px] border-2 border-white/70 bg-white/15 text-base font-extrabold md:h-11 md:w-11 md:rounded-[14px_18px_15px_19px] md:text-lg">{num}</span>
-            <span class="text-sm font-bold tracking-widest opacity-80">第 {num} 章</span>
+          <div class="flex items-center gap-2 md:gap-3">
+            <span class="flex h-8 w-8 shrink-0 rotate-[-4deg] items-center justify-center rounded-[11px_14px_12px_15px] border-2 border-white/70 bg-white/15 text-sm font-extrabold md:h-11 md:w-11 md:rounded-[14px_18px_15px_19px] md:text-lg">{num}</span>
+            <span class="text-[11px] font-bold tracking-widest opacity-80 md:text-sm">第 {num} 章</span>
           </div>
-          <h1 class="text-3xl font-extrabold leading-tight md:text-4xl">{title}</h1>
-          <p class="max-w-xl text-white/90">{subtitle}</p>
+          <h1 class="text-[1.35rem] font-extrabold leading-snug md:text-4xl md:leading-tight">{title}</h1>
+          <p class="max-w-xl text-[13px] leading-relaxed text-white/90 md:text-base md:leading-[1.78]">{subtitle}</p>
         </div>
         <div class="bg-paper">
           <img
@@ -52,7 +52,7 @@ const heroAlt = HERO_ALT[num] ?? `第 ${num} 章特色配图`;
           />
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 border-t-2 border-dora-deep bg-card px-6 py-3 text-xs text-ink/60 md:px-9">
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 border-t-2 border-dora-deep bg-card px-5 py-2.5 text-[11px] leading-relaxed text-ink/60 md:px-9 md:py-3 md:text-xs">
         <span>阅读姿势：先看漫画条进入剧情 → 跟架构图与意象图建立全局 → 逐个 CodeWalk 精读真实代码 → 动手实验验证</span>
       </div>
     </header>

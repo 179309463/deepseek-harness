@@ -12,12 +12,12 @@ const links = [
 ] as const;
 ---
 
-<section class="comic-card mb-8 overflow-hidden">
+<section class="comic-card mb-6 overflow-hidden md:mb-8">
   <div class="grid md:grid-cols-[1fr_0.8fr]">
-    <div class="px-6 py-6">
-      <p class="text-xs font-bold tracking-[0.2em] text-ink/45">附录 · 随手查</p>
-      <p class="mt-1.5 text-lg font-extrabold text-dora-deep">三张速查表，读到哪儿卡住就翻回来</p>
-      <nav class="mt-4 flex flex-wrap gap-3" aria-label="附录导航">
+    <div class="px-5 py-4 md:px-6 md:py-6">
+      <p class="text-[11px] font-bold tracking-[0.2em] text-ink/45 md:text-xs">附录 · 随手查</p>
+      <p class="mt-1 text-base font-extrabold leading-snug text-dora-deep md:mt-1.5 md:text-lg">三张速查表，读到哪儿卡住就翻回来</p>
+      <nav class="mt-3 flex flex-wrap gap-2 md:mt-4 md:gap-3" aria-label="附录导航">
         {links.map((l) => (
           <a
             href={l.href}
@@ -32,7 +32,7 @@ const links = [
         ))}
       </nav>
     </div>
-    <div class="relative min-h-[160px] border-t-2 border-dora-deep bg-paper md:border-t-0 md:border-l-2">
+    <div class="relative aspect-[16/9] border-t-2 border-dora-deep bg-paper md:aspect-auto md:min-h-full md:border-t-0 md:border-l-2">
       <img
         src="/art/appendix-banner.webp"
         alt="附录插画：吉祥物小机器猫举着放大镜站在木质档案柜前，卡片从抽屉里飞出来，戴眼镜的小男孩踩着小凳翻找文件夹"
@@ -48,14 +48,20 @@ const links = [
   /* 手绘描边胶囊：不等圆角 + 实体偏移投影，和站点贴纸质感一致 */
   .appendix-tab {
     display: inline-block;
-    padding: 0.45rem 1rem;
-    font-size: 0.875rem;
+    padding: 0.32rem 0.75rem;
+    font-size: 0.75rem;
     font-weight: 800;
     border: 2px solid #1b5faa;
     border-radius: 14px 17px 15px 18px / 17px 14px 18px 15px;
     box-shadow: 3px 4px 0 rgba(27, 95, 170, 0.15);
     text-decoration: none;
     transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  @media (min-width: 768px) {
+    .appendix-tab {
+      padding: 0.45rem 1rem;
+      font-size: 0.875rem;
+    }
   }
   .appendix-tab:hover {
     transform: translate(-1px, -2px);
