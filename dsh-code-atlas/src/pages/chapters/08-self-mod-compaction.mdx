@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="08"
@@ -46,6 +47,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     BASIC --> SESS["Session 日志<br/>compaction/start|summary|end + surface replace"]
     CMD --> DEF
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch08-art.webp"
+  alt="第 08 章意象图：左边一面立镜里映出打开的工具箱与螺丝刀，右边一台木质压力机把一叠纸压成一个小方块"
+  caption="镜子是 cordis_inspect：agent 先照见自己的插件树再动手改自己；压力机是 compaction，把长历史压成一张摘要。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 关键行 | 本章要回答的问题 |
 |---|---|---|

@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="05"
@@ -41,6 +42,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     RLA --> TC
     DISP --> IFACE
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch05-art.webp"
+  alt="第 05 章意象图：一个蓝色大圆环内部有三只齿轮在转，环下方三只信箱用橙色虚线连回圆环"
+  caption="圆环是一次 turn 里的 step 循环，信箱是 inbox：外部消息不打断循环，而是排队等下一次取件。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 行数 | 本章要回答的问题 |
 |---|---|---|

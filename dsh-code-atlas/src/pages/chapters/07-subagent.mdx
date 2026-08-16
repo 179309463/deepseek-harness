@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="07"
@@ -42,6 +43,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     RT --> FORK
     RT --> ACP
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch07-art.webp"
+  alt="第 07 章意象图：三扇拱门前站着一组由大到小的俄罗斯套娃，最右侧门内是一座发光的浮空岛，门前拉着栏杆"
+  caption="套娃是父 agent 和它的分身，一层套一层；栏杆就是 maxDepth——套到规定层数就不许再往里套。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 关键行 | 本章要回答的问题 |
 |---|---|---|

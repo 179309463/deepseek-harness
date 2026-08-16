@@ -1,0 +1,40 @@
+---
+interface Props {
+  /** 插画路径，指向 public/art 下的 webp 资源 */
+  src: string;
+  /** 无障碍描述：读屏用户靠它理解画面表达的机制隐喻 */
+  alt: string;
+  /** 图注：说明这张画在源码语义上对应什么 */
+  caption: string;
+  /** 左上角胶带标签，默认「意象图」 */
+  label?: string;
+  /** 与上方 UML 图并置时，在插画上方画一条虚线连接标记 */
+  pairWith?: string;
+  /** 画面比例，宽屏 hero 用 21/9，章节意象图用 3/2 */
+  ratio?: 'wide' | 'plate';
+}
+
+const { src, alt, caption, label = '意象图', pairWith, ratio = 'plate' } = Astro.props;
+const aspect = ratio === 'wide' ? 'aspect-[21/9]' : 'aspect-[3/2]';
+---
+
+{pairWith ? <div class="art-pair-link">{pairWith}</div> : null}
+
+<figure class="my-7">
+  <div class="art-frame tape-top relative">
+    <span class="absolute top-3 left-4 z-[3] rounded-[10px_13px_11px_14px] border-2 border-dora-deep bg-card px-2.5 py-1 text-[11px] font-extrabold text-dora-deep shadow-[2px_3px_0_rgba(27,95,170,0.16)]">
+      {label}
+    </span>
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      class:list={['block w-full object-cover', aspect]}
+    />
+  </div>
+  <figcaption class="mt-3 flex items-start gap-2 px-1 text-sm leading-relaxed text-ink/60">
+    <span class="mt-[0.35rem] inline-block h-2.5 w-2.5 shrink-0 rotate-12 rounded-[3px_5px_3px_5px] bg-accent"></span>
+    <span>{caption}</span>
+  </figcaption>
+</figure>

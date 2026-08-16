@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="03"
@@ -43,6 +44,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     TB --> SD
     HK --> SD
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch03-art.webp"
+  alt="第 03 章意象图：三角形的三个顶点：左下两台带插头的小设备、右下一只手握着的遥控器、顶部墙上的插座面板，底边中间留着一段虚线断口"
+  caption="插座面板是 Service Definition，带插头的设备是 Provider，握遥控器的手是 Consumer——换掉任何一台设备，那只手都不用改。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 行数 | 本章要回答的问题 |
 |---|---|---|

@@ -9,35 +9,75 @@ interface Props {
   next?: { slug: string; title: string };
 }
 
+/**
+ * 每章特色配图的中文画面描述。
+ * 读屏用户与图片加载失败时靠它理解画面表达的机制隐喻，所以描述具体画面元素而非章节标题。
+ */
+const HERO_ALT: Record<string, string> = {
+  '01': '吉祥物小机器猫双手捧着一颗发光的水晶内核，周围漂浮着许多插件小方块与行星，戴眼镜的小男孩工程师朝它飞去',
+  '02': '一台纸箱与齿轮拼成的装配机，配置纸带从传送带送进机器，顶端长出一棵挂满插件箱子的树，吉祥物举着放大镜检查',
+  '03': '木桌上摆着水壶、风车、烤面包机三种不同的电器，中间是一个三角形插座轮廓，同一个插头由吉祥物和小男孩共同递上',
+  '04': '一条由纸片铺成的河流从远方流来，吉祥物划着纸船顺流而下，小男孩在岸边用网兜捞纸片，岸边树上挂着一把锁',
+  '05': '吉祥物站在小台子上打旗语，一个蓝色大圆环正在转动，环下排着几只信箱收发纸条，小男孩坐在圆环上一起转',
+  '06': '左边挂着一排待换的衬衫，吉祥物系着围裙站在中间；右边是一间审批亭，一枚大印章正要落在文件上，亭前拉着栏杆',
+  '07': '一排颜色各异的任意门，吉祥物的多个分身排队依次穿门，最右侧那扇门透出光亮，小男孩在门口指挥',
+  '08': '吉祥物对着一面大镜子给自己更换零件，旁边一台纸箱机器把长长的纸带压成一张小卡片，小男孩拿着球棒站在一旁',
+  '09': '工厂流水线上，纸箱依次通过三道装着放大镜的拱门接受检查，吉祥物挥手放行，小男孩推着小车，背景是厂房与气球',
+};
+
 const { num, title, subtitle, prev, next } = Astro.props;
+const heroSrc = `/art/ch${num}-hero.webp`;
+const heroAlt = HERO_ALT[num] ?? `第 ${num} 章特色配图`;
 ---
 
 <Base title={`第 ${num} 章 · ${title}`}>
   <article class="prose-atlas mx-auto w-full">
     <header class="comic-card mb-10 overflow-hidden">
-      <div class="chapter-hero border-b border-white/20 bg-dora text-white">
-        <div class="text-sm font-bold tracking-widest opacity-80">CHAPTER {num}</div>
+      <div class="relative bg-paper">
+        <img
+          src={heroSrc}
+          alt={heroAlt}
+          fetchpriority="high"
+          decoding="async"
+          class="block aspect-[16/7] w-full object-cover md:aspect-[21/8]"
+        />
+        <span class="absolute top-4 left-5 flex h-14 w-14 rotate-[-4deg] items-center justify-center rounded-[18px_22px_19px_23px] border-2 border-dora-deep bg-card text-xl font-extrabold text-dora-deep shadow-[3px_4px_0_rgba(27,95,170,0.18)]">
+          {num}
+        </span>
+        <span class="absolute right-5 bottom-4 rounded-[11px_14px_12px_15px] border-2 border-dora-deep bg-card/95 px-3 py-1 text-[11px] font-extrabold text-dora-deep shadow-[2px_3px_0_rgba(27,95,170,0.16)]">
+          本章特色配图
+        </span>
+      </div>
+      <div class="chapter-hero border-y-2 border-dora-deep bg-dora text-white">
+        <div class="text-sm font-bold tracking-widest opacity-80">第 {num} 章</div>
         <h1 class="text-3xl font-extrabold">{title}</h1>
         <p class="text-white/90">{subtitle}</p>
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-1 bg-card px-6 py-3 text-xs text-ink/60">
-        <span>阅读姿势：先看漫画条进入剧情 → 跟架构图建立全局 → 逐个 CodeWalk 精读真实代码 → 动手实验验证</span>
+        <span>阅读姿势：先看漫画条进入剧情 → 跟架构图与意象图建立全局 → 逐个 CodeWalk 精读真实代码 → 动手实验验证</span>
       </div>
     </header>
 
     <slot />
 
-    <nav class="mt-14 grid gap-4 sm:grid-cols-2">
+    <div class="art-pair-link mt-14">继续往前走</div>
+    <nav class="grid gap-4 sm:grid-cols-2">
       {prev ? (
-        <a href={`/chapters/${prev.slug}`} class="comic-card comic-card-hover block p-4">
-          <div class="text-xs text-ink/50">← 上一章</div>
-          <div class="font-bold text-dora-deep">{prev.title}</div>
+        <a href={`/chapters/${prev.slug}`} class="comic-card comic-card-hover flex items-center gap-3 p-4">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px_15px_13px_16px] border-2 border-dora-deep bg-mint/60 text-base font-extrabold text-dora-deep">←</span>
+          <span>
+            <span class="block text-xs text-ink/50">上一章</span>
+            <span class="block font-bold text-dora-deep">{prev.title}</span>
+          </span>
         </a>
       ) : <span />}
       {next ? (
-        <a href={`/chapters/${next.slug}`} class="comic-card comic-card-hover block p-4 text-right">
-          <div class="text-xs text-ink/50">下一章 →</div>
-          <div class="font-bold text-dora-deep">{next.title}</div>
+        <a href={`/chapters/${next.slug}`} class="comic-card comic-card-hover flex items-center justify-end gap-3 p-4 text-right sm:col-start-2">
+          <span>
+            <span class="block text-xs text-ink/50">下一章</span>
+            <span class="block font-bold text-dora-deep">{next.title}</span>
+          </span>
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px_15px_13px_16px] border-2 border-dora-deep bg-blush text-base font-extrabold text-dora-deep">→</span>
         </a>
       ) : <span />}
     </nav>

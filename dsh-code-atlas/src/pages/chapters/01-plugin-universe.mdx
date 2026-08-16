@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="01"
@@ -39,6 +40,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     R --> G
     R --> E
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch01-art.webp"
+  alt="第 01 章意象图：中央一颗蓝色晶体用四条橙色轴线连向四个纸托上的道具——镜子、抽屉柜、小盆栽和一圈水面涟漪"
+  caption="晶体就是一个 Context：服务、事件、effect 全从它身上分叉出去；卸载时沿着同样的四条轴线逆序收回。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 行数 | 本章要回答的问题 |
 |---|---|---|

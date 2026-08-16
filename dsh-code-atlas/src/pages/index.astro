@@ -3,37 +3,57 @@ import Base from '../layouts/Base.astro';
 import MermaidDiagram from '../components/MermaidDiagram.astro';
 
 const chapters = [
-  { slug: '01-plugin-universe', num: '01', title: '插件宇宙观', desc: 'Context、Fiber、effect/dispose、事件总线：一切皆插件的世界如何运转', files: 'vendor/cordis/src/*' },
-  { slug: '02-loader', num: '02', title: '装载与卸载', desc: 'Loader、Entry/Group、依赖顺序、isolate realm：配置如何长成插件树', files: 'vendor/loader/src/*' },
-  { slug: '03-capability-seam', num: '03', title: '接口学', desc: 'Service Definition / Provider / Consumer 三角完整解剖，以 shell 为样板', files: 'packages/shell/*' },
-  { slug: '04-session-memory', num: '04', title: '记忆真相', desc: 'SessionEvent 只增不改、surface 折叠、model-visible ⟺ logged 铁律', files: 'packages/core/session/*' },
-  { slug: '05-agent-loop', num: '05', title: '循环内部', desc: 'ReactLoopAgent 的 turn/step/inbox 编排与 waterfall 事件图', files: 'packages/core/agent-loop/*' },
-  { slug: '06-layers-approval', num: '06', title: '分层与审批', desc: 'profile/bundle/patch 四层叠加；tools/pre-execute 与 fail-closed 审批', files: 'packages/boot/* · interaction/*' },
-  { slug: '07-subagent', num: '07', title: '分身术', desc: 'SubagentRuntime、maxDepth 铁律、spawn/fork/acp 三种 Provider', files: 'packages/subagent/*' },
-  { slug: '08-self-mod-compaction', num: '08', title: '自改装与瘦身', desc: 'cordis_inspect/define/run 运行时改自己；compaction 引擎', files: 'packages/extensions/* · compaction/*' },
-  { slug: '09-production', num: '09', title: '走向生产', desc: 'ACP/JSON-RPC 协议层、快照测试与仓库 gates 工程纪律', files: 'packages/acp · sdk · scripts/' },
+  { slug: '01-plugin-universe', num: '01', title: '插件宇宙观', desc: 'Context、Fiber、effect/dispose、事件总线：一切皆插件的世界如何运转', files: 'vendor/cordis/src/*', alt: '发光的水晶内核与围绕它的插件小方块' },
+  { slug: '02-loader', num: '02', title: '装载与卸载', desc: 'Loader、Entry/Group、依赖顺序、isolate realm：配置如何长成插件树', files: 'vendor/loader/src/*', alt: '配置纸带送进齿轮装配机，长出一棵插件树' },
+  { slug: '03-capability-seam', num: '03', title: '接口学', desc: 'Service Definition / Provider / Consumer 三角完整解剖，以 shell 为样板', files: 'packages/shell/*', alt: '三种不同的电器共用同一个三角形插座' },
+  { slug: '04-session-memory', num: '04', title: '记忆真相', desc: 'SessionEvent 只增不改、surface 折叠、model-visible ⟺ logged 铁律', files: 'packages/core/session/*', alt: '纸片铺成的河流与岸边拿网兜的小男孩' },
+  { slug: '05-agent-loop', num: '05', title: '循环内部', desc: 'ReactLoopAgent 的 turn/step/inbox 编排与 waterfall 事件图', files: 'packages/core/agent-loop/*', alt: '转动的蓝色大圆环与环下排列的信箱' },
+  { slug: '06-layers-approval', num: '06', title: '分层与审批', desc: 'profile/bundle/patch 四层叠加；tools/pre-execute 与 fail-closed 审批', files: 'packages/boot/* · interaction/*', alt: '一排待换的衬衫与旁边落印的审批亭' },
+  { slug: '07-subagent', num: '07', title: '分身术', desc: 'SubagentRuntime、maxDepth 铁律、spawn/fork/acp 三种 Provider', files: 'packages/subagent/*', alt: '分身排队穿过一排任意门' },
+  { slug: '08-self-mod-compaction', num: '08', title: '自改装与瘦身', desc: 'cordis_inspect/define/run 运行时改自己；compaction 引擎', files: 'packages/extensions/* · compaction/*', alt: '对镜更换零件，旁边的机器把纸带压成小卡片' },
+  { slug: '09-production', num: '09', title: '走向生产', desc: 'ACP/JSON-RPC 协议层、快照测试与仓库 gates 工程纪律', files: 'packages/acp · sdk · scripts/', alt: '纸箱依次通过三道放大镜拱门的流水线' },
 ];
 ---
 
 <Base title="首页">
-  <section class="comic-card mb-10 overflow-hidden">
-    <div class="border-b border-white/20 bg-gradient-to-br from-dora to-dora-deep px-6 py-10 text-white md:px-10">
-      <p class="text-sm font-bold tracking-widest opacity-80">DEEPSEEK-HARNESS SOURCE CODE ATLAS</p>
-      <h1 class="mt-2 text-3xl font-extrabold leading-tight md:text-4xl">哆啦A梦带队，钻进 dsh 的源码里</h1>
-      <p class="mt-4 max-w-2xl text-white/90">
-        这不是又一份「README 翻译」。每一章都从一段深夜检修的故事开场，用 UML 图建立全局，
-        然后逐段精读 <strong>仓库里的真实代码</strong>（含文件路径与行号锚点），最后给你一个能亲手跑起来的实验。
-        读完 9 章，你就真的吃透了这个插件式 agent harness。
-      </p>
-      <div class="mt-6 flex flex-wrap gap-3">
-        <a href="/chapters/01-plugin-universe" class="on-accent rounded-xl px-5 py-2 font-bold transition hover:-translate-y-0.5">从第 1 章开始 →</a>
-        <a href="/appendix/symbols" class="rounded-xl border border-white/40 px-5 py-2 font-bold text-white transition hover:bg-white/10">查符号索引</a>
+  <section class="comic-card mb-12 overflow-hidden">
+    <div class="grid md:grid-cols-[1.02fr_0.98fr]">
+      <div class="bg-gradient-to-br from-dora to-dora-deep px-6 py-9 text-white md:px-9 md:py-11">
+        <p class="text-sm font-bold tracking-widest opacity-80">源码图鉴 · 绘本式源码精读</p>
+        <h1 class="mt-2 text-3xl font-extrabold leading-tight md:text-4xl">哆啦A梦带队，钻进 dsh 的源码里</h1>
+        <p class="mt-4 max-w-xl text-white/90">
+          这不是又一份「README 翻译」。每一章都从一段深夜检修的故事开场，用 UML 图与意象插画建立全局，
+          然后逐段精读 <strong>仓库里的真实代码</strong>（含文件路径与行号锚点），最后给你一个能亲手跑起来的实验。
+          读完 9 章，你就真的吃透了这个插件式 agent harness。
+        </p>
+        <div class="mt-6 flex flex-wrap gap-3">
+          <a href="/chapters/01-plugin-universe" class="on-accent rounded-[14px_17px_15px_18px] border-2 border-white/70 px-5 py-2 font-bold shadow-[3px_4px_0_rgba(15,52,96,0.28)] transition hover:-translate-y-0.5">从第 1 章开始 →</a>
+          <a href="/appendix/symbols" class="rounded-[14px_17px_15px_18px] border-2 border-white/60 px-5 py-2 font-bold text-white transition hover:bg-white/10">查符号索引</a>
+        </div>
+      </div>
+      <div class="relative min-h-[240px] bg-paper">
+        <img
+          src="/art/hero-home.webp"
+          alt="首页主视觉：蓝色小机器猫吉祥物与戴眼镜的小男孩工程师坐在源码堆成的小山上，身边漂浮着插件方块、齿轮与纸带"
+          fetchpriority="high"
+          decoding="async"
+          class="absolute inset-0 h-full w-full object-cover"
+        />
       </div>
     </div>
-    <div class="grid gap-4 bg-card px-6 py-5 text-sm md:grid-cols-3 md:px-10">
-      <div><strong class="text-dora-deep">真实代码</strong><br />每个论点都锚定文件:行号</div>
-      <div><strong class="text-dora-deep">UML 可视化</strong><br />架构 / 时序 / 活动 / 用例图</div>
-      <div><strong class="text-dora-deep">动手实验</strong><br />可复制的命令与观察点</div>
+    <div class="grid gap-4 border-t-2 border-dora-deep bg-card px-6 py-5 text-sm md:grid-cols-3 md:px-9">
+      <div class="flex items-start gap-2.5">
+        <span class="mt-0.5 inline-block h-4 w-4 shrink-0 rotate-6 rounded-[5px_7px_5px_7px] border-2 border-dora-deep bg-dora"></span>
+        <span><strong class="text-dora-deep">真实代码</strong><br />每个论点都锚定文件:行号</span>
+      </div>
+      <div class="flex items-start gap-2.5">
+        <span class="mt-0.5 inline-block h-4 w-4 shrink-0 -rotate-6 rounded-[5px_7px_5px_7px] border-2 border-dora-deep bg-mint"></span>
+        <span><strong class="text-dora-deep">图解双轨</strong><br />UML 机制图 + 手绘意象图</span>
+      </div>
+      <div class="flex items-start gap-2.5">
+        <span class="mt-0.5 inline-block h-4 w-4 shrink-0 rotate-12 rounded-[5px_7px_5px_7px] border-2 border-dora-deep bg-accent"></span>
+        <span><strong class="text-dora-deep">动手实验</strong><br />可复制的命令与观察点</span>
+      </div>
     </div>
   </section>
 
@@ -41,38 +61,52 @@ const chapters = [
   <MermaidDiagram title="dsh 架构分层与章节对照" caption="从下往上读：Cordis 内核是地基，能力 seam 是装备，协议层是对外的桥">
     flowchart TB
       subgraph L3["协议与装配层（第 6、9 章）"]
+        direction LR
         ACP["packages/acp"]
         SDK["packages/sdk"]
         BOOT["packages/boot/app-boot"]
       end
       subgraph L2["能力层（第 3、7、8 章）"]
+        direction LR
         SHELL["shell seam"]
         SUB["subagent seam"]
         COMP["compaction"]
         EXT["extensions/tool-cordis"]
       end
       subgraph L1["产品脊柱（第 4、5 章）"]
+        direction LR
         LOOP["core/agent-loop"]
         SESS["core/session"]
         TOOLS["core/tools"]
       end
       subgraph L0["Cordis 内核（第 1、2 章）"]
+        direction LR
         CTX["vendor/cordis"]
         LOAD["vendor/loader"]
       end
       L3 --> L2 --> L1 --> L0
   </MermaidDiagram>
 
-  <h2 class="section-title mb-4 mt-12 text-2xl font-extrabold">九章之旅</h2>
-  <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+  <h2 class="section-title section-title-accent mb-4 mt-14 text-2xl font-extrabold">九章之旅</h2>
+  <p class="mb-6 max-w-2xl text-sm text-ink/60">每章都配一张手绘特色插图，先用一幅画记住机制，再进去读代码。</p>
+  <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
     {chapters.map((c) => (
-      <a href={`/chapters/${c.slug}`} class="comic-card comic-card-hover block p-5">
-        <div class="flex items-center gap-3">
-          <span class="flex h-10 w-10 items-center justify-center rounded-full border border-[#b7d0e6] bg-dora font-extrabold text-white">{c.num}</span>
-          <h3 class="text-lg font-extrabold text-dora-deep">{c.title}</h3>
+      <a href={`/chapters/${c.slug}`} class="comic-card comic-card-hover block overflow-hidden">
+        <div class="relative bg-paper">
+          <img
+            src={`/art/ch${c.num}-hero.webp`}
+            alt={`第 ${c.num} 章配图：${c.alt}`}
+            loading="lazy"
+            decoding="async"
+            class="block aspect-[16/9] w-full object-cover"
+          />
+          <span class="absolute top-3 left-3 flex h-9 w-9 rotate-[-5deg] items-center justify-center rounded-[12px_15px_13px_16px] border-2 border-dora-deep bg-card text-sm font-extrabold text-dora-deep shadow-[2px_3px_0_rgba(27,95,170,0.18)]">{c.num}</span>
         </div>
-        <p class="mt-3 text-sm text-ink/80">{c.desc}</p>
-        <p class="mt-3 font-mono text-xs text-ink/45">{c.files}</p>
+        <div class="border-t-2 border-dora-deep p-5">
+          <h3 class="text-lg font-extrabold text-dora-deep">{c.title}</h3>
+          <p class="mt-2 text-sm text-ink/80">{c.desc}</p>
+          <p class="mt-3 font-mono text-xs text-ink/45">{c.files}</p>
+        </div>
       </a>
     ))}
   </div>

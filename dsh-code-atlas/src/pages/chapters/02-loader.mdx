@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="02"
@@ -32,6 +33,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     REG --> FIB["Fiber：INACTIVE → ACTIVE"]
     ISO["isolate.ts<br/>LocalRealm / GlobalRealm"] -.-> ENT
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch02-art.webp"
+  alt="第 02 章意象图：一卷印着蓝橙方块的配置纸带经过一串咬合的齿轮，末端长成一棵挂满插件箱子的树"
+  caption="纸带是 cordis.yml，齿轮组是 Loader，长出来的这棵树才是运行时真正的插件形态。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 行数 | 本章要回答的问题 |
 |---|---|---|

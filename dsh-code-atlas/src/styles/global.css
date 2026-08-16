@@ -1,20 +1,40 @@
 @import "tailwindcss";
 
+/*
+  站点视觉语言：丝网印刷绘本（Risograph picture-book）。
+  三条硬规则：
+  1. 只有亮白/米白一种配色，禁止任何暗黑模式（`color-scheme: only light` + 不写 prefers-color-scheme 分支）。
+  2. 描边优先于阴影：卡片用墨蓝描边 + 实体偏移投影（贴纸感），不用弥散大阴影堆叠层级。
+  3. 手绘不规则：圆角用四角不等的 border-radius，标题下划线用蜡笔波浪，避免规整的 UI 组件味。
+*/
+
 @theme {
   --color-dora: #2b9fe3;
   --color-dora-deep: #1b5faa;
   --color-paper: #faf6ee;
-  --color-ink: #222222;
+  --color-ink: #223243;
   --color-accent: #ff8c42;
-  --color-card: #ffffff;
-  --color-mist: #eef4fa;
+  --color-card: #fffdf8;
+  --color-mist: #eaf3fb;
   --color-danger: #e5534b;
+  --color-mint: #86d3c8;
+  --color-blush: #ffe0cb;
+  --color-line: #bcd6ea;
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
 :root {
   color-scheme: only light;
+
+  /* 手绘描边与贴纸投影的统一取值 */
+  --edge: 2px solid #1b5faa;
+  --edge-soft: 1.5px solid #bcd6ea;
+  --sticker: 4px 5px 0 rgba(27, 95, 170, 0.13);
+  --sticker-sm: 3px 3px 0 rgba(27, 95, 170, 0.12);
+  --sticker-accent: 4px 5px 0 rgba(255, 140, 66, 0.22);
+  --wobble: 22px 28px 24px 30px / 28px 22px 30px 24px;
+  --wobble-sm: 14px 18px 15px 19px / 18px 14px 19px 15px;
 }
 
 html {
@@ -22,42 +42,79 @@ html {
 }
 
 body {
+  position: relative;
   background-color: var(--color-paper);
-  background-image: radial-gradient(circle, rgba(43, 159, 227, 0.07) 1px, transparent 1px);
-  background-size: 24px 24px;
+  /* 双层网点：蓝色细点 + 橙色疏点，模拟丝网印刷的套色网屏 */
+  background-image:
+    radial-gradient(circle, rgba(43, 159, 227, 0.09) 1px, transparent 1px),
+    radial-gradient(circle, rgba(255, 140, 66, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px, 66px 66px;
+  background-position: 0 0, 11px 11px;
   color: var(--color-ink);
   font-family: var(--font-sans);
-  line-height: 1.75;
+  line-height: 1.78;
 }
 
-/* 卡片 / 精读卡：浅蓝细边 + 轻阴影，不抢内容焦点 */
+/* 全页纸纹：固定一层柔和噪点，乘法混合，让所有色块都带印刷颗粒 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.16'/%3E%3C/svg%3E");
+}
+
+/* 卡片 / 精读卡：米白纸 + 墨蓝描边 + 贴纸投影 + 四角不等圆角 */
 .comic-card,
 .read-card {
   background: var(--color-card);
-  border: 1px solid #d5e3f0;
-  border-radius: 16px;
-  box-shadow: 0 10px 28px rgba(27, 95, 170, 0.06);
+  border: var(--edge);
+  border-radius: var(--wobble);
+  box-shadow: var(--sticker);
 }
 
 .comic-card-hover {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-radius 0.3s ease;
 }
 
 .comic-card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 32px rgba(27, 95, 170, 0.1);
+  transform: translate(-2px, -3px) rotate(-0.35deg);
+  box-shadow: 7px 9px 0 rgba(27, 95, 170, 0.16);
+  border-radius: 28px 22px 30px 24px / 22px 28px 24px 30px;
 }
 
-/* 对话框气泡：微信/飞书式，尾巴朝向头像 */
+/* 胶带贴条：给卡片顶边贴一条半透明橙色和纸胶带 */
+.tape-top {
+  position: relative;
+}
+
+.tape-top::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  width: 108px;
+  height: 22px;
+  transform: translateX(-50%) rotate(-1.6deg);
+  background: rgba(255, 140, 66, 0.45);
+  border-left: 1px dashed rgba(255, 255, 255, 0.7);
+  border-right: 1px dashed rgba(255, 255, 255, 0.7);
+  z-index: 2;
+}
+
+/* 对话框气泡：手绘不规则圆角，尾巴朝向头像 */
 .speech-bubble {
   position: relative;
   background: var(--color-card);
-  border: 1px solid #d5e3f0;
-  border-radius: 14px;
-  padding: 0.85rem 1.05rem;
+  border: 2px solid var(--color-dora-deep);
+  border-radius: var(--wobble-sm);
+  padding: 0.85rem 1.1rem;
   display: inline-block;
   max-width: 100%;
-  box-shadow: 0 4px 14px rgba(27, 95, 170, 0.05);
+  box-shadow: var(--sticker-sm);
 }
 
 .bubble-other {
@@ -65,43 +122,45 @@ body {
 }
 
 .bubble-mine {
-  background: #fff4ea;
-  border-color: #f0d4bc;
+  background: #fff3e8;
+  border-color: #e08340;
   border-top-right-radius: 4px;
+  box-shadow: var(--sticker-accent);
 }
 
 .bubble-other::before,
 .bubble-mine::before {
   content: "";
   position: absolute;
-  top: 14px;
-  width: 8px;
-  height: 8px;
+  top: 15px;
+  width: 10px;
+  height: 10px;
   background: inherit;
-  border: 1px solid #d5e3f0;
+  border: 2px solid var(--color-dora-deep);
   transform: rotate(45deg);
 }
 
 .bubble-other::before {
-  left: -5px;
+  left: -6px;
   border-right: none;
   border-top: none;
 }
 
 .bubble-mine::before {
-  right: -5px;
+  right: -6px;
   border-left: none;
   border-bottom: none;
-  border-color: #f0d4bc;
-  background: #fff4ea;
+  border-color: #e08340;
+  background: #fff3e8;
 }
 
-/* 代码块容器 */
+/* 代码块容器：浅色纸卡，禁止深色终端底 */
 .code-frame {
-  border: 1px solid #d5e3f0;
-  border-radius: 10px;
+  border: 2px solid var(--color-dora-deep);
+  border-radius: 12px;
   overflow: hidden;
-  background: #f6f8fa;
+  background: #f4f8fc;
+  box-shadow: var(--sticker-sm);
 }
 
 .code-frame pre {
@@ -121,24 +180,47 @@ body {
   flex-direction: column;
 }
 
-/* 标题装饰：蓝色下划波浪 */
+/* 标题装饰：蜡笔波浪下划线（替代规整的直线边框） */
 .section-title {
   display: inline-block;
-  border-bottom: 4px solid var(--color-dora);
-  padding-bottom: 2px;
+  padding-bottom: 0.55rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='10' viewBox='0 0 48 10'%3E%3Cpath d='M0 6 Q6 1 12 6 T24 6 T36 6 T48 6' fill='none' stroke='%232b9fe3' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: auto 9px;
+}
+
+.section-title-accent {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='10' viewBox='0 0 48 10'%3E%3Cpath d='M0 6 Q6 1 12 6 T24 6 T36 6 T48 6' fill='none' stroke='%23ff8c42' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 /* MDX 正文排版 */
 .prose-atlas h2 {
-  font-size: 1.5rem;
+  position: relative;
+  padding-left: 1.35rem;
+  font-size: 1.55rem;
   font-weight: 800;
-  margin-top: 2.6rem;
+  margin-top: 2.8rem;
   margin-bottom: 1rem;
   color: var(--color-dora-deep);
 }
 
+/* h2 前的橙色手撕纸贴片 */
+.prose-atlas h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 0.68rem;
+  height: 0.68rem;
+  background: var(--color-accent);
+  border: 1.5px solid var(--color-dora-deep);
+  border-radius: 4px 7px 5px 8px;
+  transform: rotate(-9deg);
+}
+
 .prose-atlas h3 {
-  font-size: 1.15rem;
+  font-size: 1.16rem;
   font-weight: 700;
   margin-top: 2rem;
   margin-bottom: 0.7rem;
@@ -159,12 +241,12 @@ body {
 }
 
 .prose-atlas p {
-  margin: 0.8rem 0;
+  margin: 0.85rem 0;
 }
 
 .prose-atlas ul,
 .prose-atlas ol {
-  margin: 0.8rem 0;
+  margin: 0.85rem 0;
   padding-left: 1.4rem;
 }
 
@@ -180,11 +262,17 @@ body {
   list-style: decimal;
 }
 
+.prose-atlas ul::marker,
+.prose-atlas li::marker {
+  color: var(--color-accent);
+}
+
 .prose-atlas code:not(pre code) {
   background: var(--color-mist);
   color: var(--color-dora-deep);
-  border-radius: 6px;
-  padding: 0.12em 0.4em;
+  border: 1px solid rgba(43, 159, 227, 0.28);
+  border-radius: 5px 7px 5px 7px;
+  padding: 0.1em 0.4em;
   font-size: 0.88em;
   font-family: var(--font-mono);
 }
@@ -192,15 +280,19 @@ body {
 .prose-atlas table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1.2rem 0;
+  margin: 1.3rem 0;
   font-size: 0.9rem;
   background: var(--color-card);
+  border: 2px solid var(--color-dora-deep);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--sticker-sm);
 }
 
 .prose-atlas th,
 .prose-atlas td {
-  border: 1.5px solid #d5e3f0;
-  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--color-line);
+  padding: 0.55rem 0.75rem;
   text-align: left;
   vertical-align: top;
 }
@@ -208,18 +300,50 @@ body {
 .prose-atlas th {
   background: var(--color-mist);
   font-weight: 700;
+  color: var(--color-dora-deep);
 }
 
+.prose-atlas tbody tr:nth-child(even) td {
+  background: rgba(250, 246, 238, 0.75);
+}
+
+/* 引用块：便利贴 + 折角 */
 .prose-atlas blockquote {
-  border-left: 4px solid var(--color-accent);
-  background: #fff7f0;
-  padding: 0.7rem 1rem;
-  margin: 1.2rem 0;
-  border-radius: 0 10px 10px 0;
+  position: relative;
+  border: 2px solid var(--color-accent);
+  background: #fff6ee;
+  padding: 0.85rem 1.1rem;
+  margin: 1.3rem 0;
+  border-radius: 10px 14px 4px 14px;
+  box-shadow: var(--sticker-accent);
+}
+
+.prose-atlas blockquote::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, transparent 48%, var(--color-accent) 50%);
 }
 
 .prose-atlas strong {
   color: var(--color-dora-deep);
+}
+
+/* 章节内的插画卡与横幅共用的手绘边框 */
+.art-frame {
+  border: var(--edge);
+  border-radius: var(--wobble);
+  box-shadow: var(--sticker);
+  background: var(--color-card);
+  overflow: hidden;
+}
+
+/* 插画底部的柔和渐隐，让画面与米白纸底自然接合 */
+.art-fade {
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
 }
 
 /* 精读逐字：未出现的字不占位，段落随打字长高；行内代码底等字出现再亮 */
@@ -275,6 +399,7 @@ body {
 .typewriter-prose[data-tw="running"] code:not(pre code):not(:has(.is-on)),
 .typewriter-prose[data-tw="pending"] code:not(pre code) {
   background: transparent;
+  border-color: transparent;
   padding-left: 0;
   padding-right: 0;
 }
@@ -349,19 +474,44 @@ body {
   margin-top: 0.5rem;
 }
 
-/* Mermaid 容器 */
+/* Mermaid 容器：纸卡 + 手绘边 + 顶部胶带 */
 .mermaid-frame {
+  position: relative;
   background: var(--color-card);
-  border: 1px solid #d5e3f0;
-  border-radius: 16px;
-  box-shadow: 0 10px 28px rgba(27, 95, 170, 0.06);
-  padding: 1.1rem 1.2rem;
-  margin: 1.4rem 0;
+  border: var(--edge);
+  border-radius: var(--wobble);
+  box-shadow: var(--sticker);
+  padding: 1.3rem 1.2rem 1.1rem;
+  margin: 1.6rem 0;
   overflow-x: auto;
 }
 
+/* mermaid 给 svg 写的是 width="100%"，会把一张 300px 宽的图等比拉到卡片宽度，高度随之失控；
+   回到 viewBox 固有尺寸居中显示，只在图比容器宽时才缩小。 */
 .mermaid-frame svg {
+  width: auto;
+  height: auto;
   max-width: 100%;
   margin: 0 auto;
   display: block;
+}
+
+/* UML 与意象插画并置时，两块之间的连接标记 */
+.art-pair-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(34, 50, 67, 0.5);
+}
+
+.art-pair-link::before,
+.art-pair-link::after {
+  content: "";
+  height: 0;
+  flex: 1;
+  border-top: 2.5px dotted var(--color-line);
 }

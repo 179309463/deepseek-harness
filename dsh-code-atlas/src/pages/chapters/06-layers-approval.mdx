@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 
 <Chapter
   num="06"
@@ -44,6 +45,13 @@ import CodeWalk from '../../components/CodeWalk.astro';
     ROOT --> BOOTF
     PROF --> BOOTF
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch06-art.webp"
+  alt="第 06 章意象图：左边四张半透明图层依次叠起，橙色虚线连到右边的审批亭与大印章，亭下摆着一个绿色对勾和一个红色叉"
+  caption="四张图层是 profile / bundle / patch 的叠加顺序，右边的印章是 tools/pre-execute 审批——没盖章就走红叉，这就是 fail-closed。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 关键行 | 本章要回答的问题 |
 |---|---|---|

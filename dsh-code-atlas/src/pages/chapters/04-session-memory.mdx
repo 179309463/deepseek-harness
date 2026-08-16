@@ -4,6 +4,7 @@ import Chapter from '../../layouts/Chapter.astro';
 import StoryStrip from '../../components/StoryStrip.astro';
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 import CodeWalk from '../../components/CodeWalk.astro';
+import ArtFigure from '../../components/ArtFigure.astro';
 import EventRiver from '../../components/EventRiver.astro';
 
 <Chapter
@@ -37,6 +38,13 @@ import EventRiver from '../../components/EventRiver.astro';
     LOG --> SURF --> DRV --> REQ --> INV
     INV -->|messages 与派生结果不一致| FAIL["fail: log-reconstruction desync"]
 </MermaidDiagram>
+
+<ArtFigure
+  src="/art/ch04-art.webp"
+  alt="第 04 章意象图：一条河从上游流下，水面漂着橙色纸片，河床下方沉积着大片半透明的方块卡片，岸边放着一叠纸和一把锁"
+  caption="水面上漂的是 surface（模型看得见的那一层），河床下沉积的是全部 SessionEvent；锁的意思是只增不改。"
+  pairWith="上图讲机制，下图讲同一件事"
+/>
 
 | 文件 | 行数 | 本章要回答的问题 |
 |---|---|---|

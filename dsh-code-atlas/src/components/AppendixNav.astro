@@ -6,52 +6,73 @@ interface Props {
 const { current } = Astro.props;
 
 const links = [
-  { key: 'symbols', href: '/appendix/symbols', label: '符号索引' },
-  { key: 'events', href: '/appendix/events', label: '事件图谱' },
-  { key: 'glossary', href: '/appendix/glossary', label: '术语表' },
+  { key: 'symbols', href: '/appendix/symbols', label: '符号索引', hint: '符号 → 文件:行号' },
+  { key: 'events', href: '/appendix/events', label: '事件图谱', hint: 'Session / Cordis 两套事件' },
+  { key: 'glossary', href: '/appendix/glossary', label: '术语表', hint: '一句话定义 + 出处章节' },
 ] as const;
 ---
 
-<nav class="mb-8 flex flex-wrap gap-3" aria-label="附录导航">
-  {links.map((l) => (
-    <a
-      href={l.href}
-      class:list={[
-        'appendix-tab',
-        l.key === current ? 'appendix-tab-on' : 'appendix-tab-off',
-      ]}
-    >
-      {l.label}
-    </a>
-  ))}
-</nav>
+<section class="comic-card mb-8 overflow-hidden">
+  <div class="grid md:grid-cols-[1fr_0.8fr]">
+    <div class="px-6 py-6">
+      <p class="text-xs font-bold tracking-[0.2em] text-ink/45">附录 · 随手查</p>
+      <p class="mt-1.5 text-lg font-extrabold text-dora-deep">三张速查表，读到哪儿卡住就翻回来</p>
+      <nav class="mt-4 flex flex-wrap gap-3" aria-label="附录导航">
+        {links.map((l) => (
+          <a
+            href={l.href}
+            title={l.hint}
+            class:list={[
+              'appendix-tab',
+              l.key === current ? 'appendix-tab-on' : 'appendix-tab-off',
+            ]}
+          >
+            {l.label}
+          </a>
+        ))}
+      </nav>
+    </div>
+    <div class="relative min-h-[160px] border-t-2 border-dora-deep bg-paper md:border-t-0 md:border-l-2">
+      <img
+        src="/art/appendix-banner.webp"
+        alt="附录插画：吉祥物小机器猫举着放大镜站在木质档案柜前，卡片从抽屉里飞出来，戴眼镜的小男孩踩着小凳翻找文件夹"
+        loading="lazy"
+        decoding="async"
+        class="absolute inset-0 h-full w-full object-cover"
+      />
+    </div>
+  </div>
+</section>
 
 <style>
+  /* 手绘描边胶囊：不等圆角 + 实体偏移投影，和站点贴纸质感一致 */
   .appendix-tab {
     display: inline-block;
-    padding: 0.5rem 1rem;
+    padding: 0.45rem 1rem;
     font-size: 0.875rem;
-    font-weight: 700;
-    border-radius: 16px;
-    border: 1px solid #d5e3f0;
-    box-shadow: 0 10px 28px rgba(27, 95, 170, 0.06);
+    font-weight: 800;
+    border: 2px solid #1b5faa;
+    border-radius: 14px 17px 15px 18px / 17px 14px 18px 15px;
+    box-shadow: 3px 4px 0 rgba(27, 95, 170, 0.15);
     text-decoration: none;
-    transition: transform 0.15s ease, background-color 0.15s ease;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
   }
   .appendix-tab:hover {
-    transform: translateY(-2px);
+    transform: translate(-1px, -2px);
+    box-shadow: 5px 6px 0 rgba(27, 95, 170, 0.18);
   }
   .appendix-tab-on {
-    background: #2b9fe3;
-    border-color: #2b9fe3;
+    background: #ff8c42;
+    border-color: #d9662a;
     color: #fff;
     -webkit-text-fill-color: #fff;
+    box-shadow: 3px 4px 0 rgba(217, 102, 42, 0.28);
   }
   .appendix-tab-off {
-    background: #fff;
+    background: #fffdf8;
     color: #1b5faa;
   }
   .appendix-tab-off:hover {
-    background: #eef4fa;
+    background: #eaf3fb;
   }
 </style>
