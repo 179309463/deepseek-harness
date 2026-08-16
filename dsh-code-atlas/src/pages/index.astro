@@ -16,22 +16,22 @@ const chapters = [
 ---
 
 <Base title="首页">
-  <section class="comic-card mb-12 overflow-hidden">
+  <section class="comic-card mb-8 overflow-hidden md:mb-12">
     <div class="grid md:grid-cols-[1.02fr_0.98fr]">
-      <div class="bg-gradient-to-br from-dora to-dora-deep px-6 py-9 text-white md:px-9 md:py-11">
-        <p class="text-sm font-bold tracking-widest opacity-80">源码图鉴 · 绘本式源码精读</p>
-        <h1 class="mt-2 text-3xl font-extrabold leading-tight md:text-4xl">哆啦A梦带队，钻进 dsh 的源码里</h1>
-        <p class="mt-4 max-w-xl text-white/90">
+      <div class="bg-gradient-to-br from-dora to-dora-deep px-5 py-5 text-white md:px-9 md:py-11">
+        <p class="text-[11px] font-bold tracking-widest opacity-80 md:text-sm">源码图鉴 · 绘本式源码精读</p>
+        <h1 class="mt-1.5 text-[1.35rem] font-extrabold leading-snug md:mt-2 md:text-4xl md:leading-tight">哆啦A梦带队，钻进 dsh 的源码里</h1>
+        <p class="mt-2.5 max-w-xl text-[13px] leading-relaxed text-white/90 md:mt-4 md:text-base md:leading-[1.78]">
           这不是又一份「README 翻译」。每一章都从一段深夜检修的故事开场，用 UML 图与意象插画建立全局，
           然后逐段精读 <strong>仓库里的真实代码</strong>（含文件路径与行号锚点），最后给你一个能亲手跑起来的实验。
           读完 9 章，你就真的吃透了这个插件式 agent harness。
         </p>
-        <div class="mt-6 flex flex-wrap gap-3">
-          <a href="/chapters/01-plugin-universe" class="on-accent rounded-[14px_17px_15px_18px] border-2 border-white/70 px-5 py-2 font-bold shadow-[3px_4px_0_rgba(15,52,96,0.28)] transition hover:-translate-y-0.5">从第 1 章开始 →</a>
-          <a href="/appendix/symbols" class="rounded-[14px_17px_15px_18px] border-2 border-white/60 px-5 py-2 font-bold text-white transition hover:bg-white/10">查符号索引</a>
+        <div class="mt-4 flex flex-wrap gap-2 md:mt-6 md:gap-3">
+          <a href="/chapters/01-plugin-universe" class="on-accent rounded-[12px_15px_13px_16px] border-2 border-white/70 px-3.5 py-1.5 text-sm font-bold shadow-[2px_3px_0_rgba(15,52,96,0.28)] transition hover:-translate-y-0.5 md:rounded-[14px_17px_15px_18px] md:px-5 md:py-2 md:text-base">从第 1 章开始 →</a>
+          <a href="/appendix/symbols" class="rounded-[12px_15px_13px_16px] border-2 border-white/60 px-3.5 py-1.5 text-sm font-bold text-white transition hover:bg-white/10 md:rounded-[14px_17px_15px_18px] md:px-5 md:py-2 md:text-base">查符号索引</a>
         </div>
       </div>
-      <div class="relative min-h-[240px] bg-paper">
+      <div class="relative aspect-[16/9] bg-paper md:aspect-auto md:min-h-full">
         <img
           src="/art/hero-home.webp"
           alt="首页主视觉：蓝色小机器猫吉祥物与戴眼镜的小男孩工程师坐在源码堆成的小山上，身边漂浮着插件方块、齿轮与纸带"
@@ -41,7 +41,7 @@ const chapters = [
         />
       </div>
     </div>
-    <div class="grid gap-4 border-t-2 border-dora-deep bg-card px-6 py-5 text-sm md:grid-cols-3 md:px-9">
+    <div class="grid gap-3 border-t-2 border-dora-deep bg-card px-5 py-3.5 text-xs md:grid-cols-3 md:gap-4 md:px-9 md:py-5 md:text-sm">
       <div class="flex items-start gap-2.5">
         <span class="mt-0.5 inline-block h-4 w-4 shrink-0 rotate-6 rounded-[5px_7px_5px_7px] border-2 border-dora-deep bg-dora"></span>
         <span><strong class="text-dora-deep">真实代码</strong><br />每个论点都锚定文件:行号</span>
