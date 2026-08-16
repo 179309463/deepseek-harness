@@ -1,0 +1,355 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+import EventRiver from '../../components/EventRiver.astro';
+
+<Chapter
+  num="04"
+  title="记忆真相"
+  subtitle="SessionEvent 只增不改的时间之河、surface 折叠、以及「model-visible ⟺ logged」铁律——agent 的记忆不是一堆字段，而是一份可回放的事件日志"
+  prev={{ slug: '03-capability-seam', title: '03 接口学' }}
+  next={{ slug: '05-agent-loop', title: '05 循环内部' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦，我重启了 dsh，agent 居然还记得我三分钟前让它改的文件！它是不是偷偷在脑子里存了小抄？' },
+  { who: 'doraemon', text: '它根本没有「脑子里的状态」。给你这个——记忆吐司的真相：agent 的全部记忆就是一份只增不改的事件日志，重启就是从头回放一遍。' },
+  { who: 'nobita', text: '回放日志就能恢复记忆？那发给模型的历史记录呢？也是从日志里变出来的？' },
+  { who: 'doraemon', text: '问得好。日志是全量真相，模型看到的只是它的投影——叫 surface。而且有一条铁律守着：凡是模型看得见的，必须能从日志重建。走，去河边看水。' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="Session 日志到模型请求的投影链" caption="append-only 日志是真相源；surface 是模型可见投影；请求必须从日志折叠回来">
+  flowchart LR
+    subgraph CORE["packages/core/session"]
+      LOG["Session.log<br/>append-only SessionEvent 数组"]
+      SURF["surface.ts<br/>只保留三类 surface 事件"]
+      DRV["deriveMessages()<br/>逐节点投影成 Message"]
+    end
+    subgraph LOOP["packages/core/agent-loop"]
+      REQ["buildRequest()<br/>组装 frozen 请求"]
+      INV["invariant.ts<br/>llm/stream 校验"]
+    end
+    LOG --> SURF --> DRV --> REQ --> INV
+    INV -->|messages 与派生结果不一致| FAIL["fail: log-reconstruction desync"]
+</MermaidDiagram>
+
+| 文件 | 行数 | 本章要回答的问题 |
+|---|---|---|
+| `packages/core/session/src/types.ts` | 436 | 日志格式版本为什么是 0？事件地图长什么样？ |
+| `packages/core/session/src/index.ts` | 1157 | `Session.append` 落一条事件时发生了什么？ |
+| `packages/core/session/src/surface.ts` | 460 | 哪些事件能进模型可见的 surface？ |
+| `packages/core/agent-loop/src/invariant.ts` | 63 | 「model-visible ⟺ logged」在哪里被强制执行？ |
+| `packages/core/session/src/repair.ts` | 133 | 进程崩在 turn 中间，重启后怎么把日志补平？ |
+
+## 源码深潜
+
+<CodeWalk file="packages/core/session/src/types.ts" lines="33-56" symbol="SESSION_FORMAT_VERSION" title="精读 1：版本号钉死在 0——不是偷懒，是诚实">
+
+<div slot="code">
+
+```ts
+/**
+ * The on-disk session format version, stamped into every newly-written {@link SessionHeader}
+ * and enforced by every persistence backend on load. The single source of truth for the
+ * version — write sites and the load-time check all read it.
+ * While the harness is unreleased it is pinned at `0`: no compatibility is
+ * implied, incompatible logs are rejected, and no migration is provided.
+ *
+ * The version is a single monotonic integer with no major/minor split. Whether
+ * a bump is needed is decided by what the WRITER emits, never by what a newer
+ * reader can accept: bump exactly when an older runtime could no longer handle
+ * a new log with full semantic correctness ("parses without error" is not
+ * correctness — silently skipping content that shapes reconstruction is a
+ * wrong read). Only structural changes reach that bar: the header shape, the
+ * {@link SessionEvent} envelope, core event semantics, or the surface
+ * mechanism (the {@link SurfaceEventType} set and {@link SurfaceOp} variants).
+ * Adding an ordinary event type does not bump — the per-event
+ * {@link SessionEvent.ignorable} guard covers vocabulary growth instead. When
+ * in doubt, bump: a near-identity upgrade step is almost free, a missed bump
+ * makes older runtimes read new logs wrong silently. The full mechanism
+ * (upgrade-step chain, in-memory view conversion, migrate-on-continue) is
+ * recorded in the session-log-version-mechanism Agent Note
+ * (`.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md`).
+ */
+export const SESSION_FORMAT_VERSION = 0
+```
+
+</div>
+
+这一行常量配了二十多行 JSDoc，因为「什么时候 bump 版本」是个容易答错的题。dsh 的答案分三层：
+
+- **预发布期钉死在 0**：不做任何兼容承诺，旧格式日志直接拒载，不提供迁移。
+- **加普通事件类型不 bump**：词汇表增长由每个事件信封上的 `ignorable: true` 兜底——不认识的可忽略事件跳过，不可忽略的拒载。
+- **只有结构性变更才 bump**：header 形状、事件信封、核心事件语义、surface 机制（`SurfaceEventType` 集合与 `SurfaceOp` 变体）。
+
+判断权在**写方**而不在读方：「能解析不报错」不算正确——静默跳过影响重建的内容就是读错了。SQLite 后端另有一个 `SCHEMA_VERSION` 管存储 schema，两者正交，别搞混。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/session/src/types.ts" lines="343-374" symbol="SurfaceEventType / SurfaceOp" title="精读 2：三类事件进 surface，replace 留给 compaction">
+
+<div slot="code">
+
+```ts
+export type SurfaceEventType =
+  | 'user/message'
+  | 'assistant/message'
+  | 'tool/result'
+
+/**
+ * A {@link SessionEvent} that is **on** the ordered surface — its
+ * `surfaceOp` is guaranteed present (mandatory), narrowed from a
+ * surface-eligible {@link SessionEvent} by checking both `type` and
+ * `surfaceOp` at runtime.
+ *
+ * Use the `isSurfaceEvent` type guard (in `surface.ts`) to narrow a
+ * `SessionEvent` to this type.
+ */
+export type SurfaceEvent = SessionEvent<SurfaceEventType> & { surfaceOp: SurfaceOp }
+
+/**
+ * How a session event entered the ordered surface. Only valid on
+ * {@link SurfaceEventType} events.
+ *
+ * - `'append'`: added to the tail — normal path for user/assistant/tool
+ *   messages.
+ * - `{ op: 'replace', start, end }`: replaces surface nodes from `start`
+ *   (inclusive) through `end` (inclusive) with this node. Both must exist as
+ *   surface nodes in the current surface. `start === end` replaces a single
+ *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
+ *   shadowed surface node. Used by compaction; any surface-replacing producer
+ *   may use it.
+ */
+export type SurfaceOp =
+  | 'append'
+  | { op: 'replace'; start: number; end: number }
+```
+
+</div>
+
+`SessionEventMap`（236–333 行）声明了十几种事件：`turn/start`、`step/end`、`assistant/chunk`、`request/header`……但**能进 surface（模型可见历史）的只有三类**：`user/message`、`assistant/message`、`tool/result`。
+
+注意 `tool/call` 不在其中：模型请求工具调用的记录留在日志里供回放配对，但进模型历史的只有结果——`tool/result` 通过 `sourceEventSeqs` 回链到它的 call 事件。
+
+每个 surface 事件必须携带 `surfaceOp` 标记自己怎么上台：
+
+- `'append'`——排到队尾，这是正常路径；
+- 替换形态——把 surface 上 `[start, end]` 区间的旧节点盖掉，compaction 瘦身专用。被盖掉的节点仍在日志里（日志只增不改），只是不再投影给模型。
+
+「日志是全量、surface 是投影」这一句话，落到类型系统里就是这两个 union。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/session/src/index.ts" lines="627-648" symbol="Session.append" title="精读 3：append 热路径——冻结、落日志、发通知，不碰磁盘">
+
+<div slot="code">
+
+```ts
+    const event = deepFreeze({
+      type,
+      seq: this.log.length,
+      time: Date.now(),
+      data: dataSnapshot,
+      ...(surfaceMetadataSnapshot as { surfaceOp?: unknown; sourceEventSeqs?: unknown }),
+    } as unknown as SessionEvent<T>)
+    this.surfaceManager.validateNext(event as SessionEvent)
+
+    if (entry !== undefined) entry.appending = true
+    try {
+      let callbacks: SessionCallback[] | undefined
+      const callbackArgs: unknown[] = [this, event]
+      if (entry !== undefined) {
+        callbacks = collectSessionCallbacks(entry.emitCtx, [entry.carrier, 'session/event', ...callbackArgs])
+      }
+      this.log.push(event as SessionEvent)
+      this.eventsSnapshot = undefined
+      if (callbacks !== undefined && entry !== undefined) {
+        invokeContainedSessionObservers(entry.emitCtx, 'session/event', entry.id, callbackArgs, callbacks)
+      }
+      return event
+```
+
+</div>
+
+每条事件诞生的完整过程：
+
+1. **深度冻结**——事件从诞生起就不可变，`seq` 就是它在数组里的下标，天然连续。
+2. **surface 校验**——`validateNext` 检查 surface 规则（比如 replace 引用的区间必须存在）。
+3. **先落内存日志，再发 `session/event` 通知**——顺序不能反：观察者收到通知时，事件必须已经在日志里。
+4. **重入防护**——`appending` 标志禁止在发布一条事件的过程中嵌套 append（625 行抛错）。
+
+最关键的事实：**核心 Session 自己不写磁盘**。持久化是订阅 `session/event` 的旁观者（write-behind），耐久性承诺由单独的 `session/flush` 提供——所以 `turn/end` 的 JSDoc 才明说循环不在 turn 边界等 flush。事件进内存日志 = 已提交给所有同步观察者，异步落盘随后跟上。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/session/src/surface.ts" lines="83-114" symbol="deriveEventMessage" title="精读 4：一个事件怎么变成一条模型消息">
+
+<div slot="code">
+
+```ts
+export function deriveEventMessage(event: SessionEvent): Message | null {
+  // Intentionally non-exhaustive: only message-producing events derive
+  // history; turn/step boundaries, chunks, usage, and errors are trace/replay
+  // data.
+  switch (event.type) {
+    // Ordinary prompts and injected context project in user role: the event's
+    // model-facing content stays verbatim. Do NOT re-add per-type framing
+    // (e.g. `<context>`) here: framing is caller-owned — a producer bakes it
+    // into `content`, as agent-instructions does with `<system-reminder>` — or,
+    // if reintroduced, must be driven by the event `meta` map and a dedicated
+    // renderer, keeping this projection a verbatim pass-through. See the
+    // deferred design note in
+    // ../../../../.agents/notes/implemented/simplification/2026-07-20-unwrap-injected-content-envelopes.md
+    case 'user/message': {
+      return event.data
+    }
+    case 'assistant/message': {
+      // Skip an empty-content assistant/message: it exists only to host a
+      // max-tokens step's usage and must not inject a content-less assistant
+      // turn into the provider transcript.
+      if (event.data.message.content.length === 0) return null
+      return event.data.message
+    }
+    case 'tool/result': {
+      return event.data.message
+    }
+    default:
+      // A non-surface event (boundary, chunk, log-only record) projects to
+      // no message. Merge-extensible union: no assertNever here.
+      return null
+  }
+}
+```
+
+</div>
+
+这是全仓库唯一的投影规则，`Session.deriveMessages()`（index.ts 726–746 行）就是把它折叠到 surface 的每个节点上。三个细节：
+
+- **逐字透传，不加框架**：`user/message` 直接返回 data——哪怕它其实是 `agent.inject()` 注入的合成上下文。注释里特意警告：不要在这里给内容包一层 `<context>` 之类的壳，framing 是生产者的责任，投影只做 verbatim pass-through。
+- **空 assistant/message 投影为 null**：它存在的唯一理由是托管 max-tokens step 的 usage 记账，绝不能变成一条没有内容的 assistant 消息塞进 provider transcript。
+- **default 返回 null 且不写 `assertNever`**：`SessionEventMap` 是可合并扩展的开放联合（别的包可以 declaration merging 新事件进来），所以这个 switch 必须对未知事件宽容地落到「不产生消息」。
+
+`deriveMessages()` 还有一层增量缓存：以 surface 的 `replaceGeneration` 为版本号，只有新节点才重新投影；一旦发生 compaction 的 `replace`，缓存整代作废重建。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/agent-loop/src/invariant.ts" lines="21-42" symbol="install (llm/stream)" title="精读 5：铁律的执行现场——每次请求前重建一遍历史对答案">
+
+<div slot="code">
+
+```ts
+  ctx.on('llm/stream', (options: GenerateOptions, next) => {
+    if (!isAgentLoopRequest(options)) return next()
+    if (!Object.isFrozen(options)) fail('a loop-built request must be frozen')
+    if (options.sessionId === undefined) fail('a loop-built request must carry a session id')
+    const session = ctx.sessions.get(options.sessionId)
+    if (!session) fail(`a loop-built request must carry a live session id, got "${String(options.sessionId)}"`)
+    if (!Object.isFrozen(options.messages)) {
+      fail('a loop-built request must carry a frozen messages array')
+    }
+
+    const events = session.events
+    if (!events.some(event => event.type === 'step/start')) {
+      return fail('a loop-built request with no step/start in its session log')
+    }
+    const header = foldRequestHeader(events)
+    if (header === undefined) {
+      return fail('a loop-built request with no request/header event in its session log')
+    }
+    const expected = session.deriveMessages()
+    if (JSON.stringify(options.messages) !== JSON.stringify(expected)) {
+      fail(`llm request for session "${String(session.id)}" diverges from the dispatch-time durable derivation (log-reconstruction desync)`)
+    }
+```
+
+</div>
+
+「model-visible ⟺ logged」在仓库规约里是一句话，在这里是**每一次模型调用前的运行时断言**。这个监听器挂在 `llm/stream` 上且带 `prepend: true`——抢在所有包装器之前，防止某个短路的回放监听器把校验静音掉。
+
+它校验的东西值得逐条读：
+
+- 请求本身和 messages 数组都必须 **frozen**——能被中途篡改的请求天然不可重建。
+- 会话日志里必须已有 `step/start` 和 `request/header`——请求不是从石头缝里蹦出来的。
+- **核心断言**：`options.messages` 必须逐字节等于此刻的 `session.deriveMessages()`。也就是说，发给模型的每一条消息，都必须能从持久化日志现场折叠回来。
+
+注意它检查的不是「凡进模型的都有事件」这种字面扫描，而是更强的性质：**请求 ≡ 日志重建**。模型可见的历史与落盘的历史是同一份数据的两个视角——这正是「状态是历史的投影」的硬保证。
+
+</CodeWalk>
+
+<EventRiver events={[
+  { type: 'turn/start', note: '开 turn 1：边界事件，只进日志' },
+  { type: 'agent/inbox/spliced', note: 'claim 走你的提问：队列变更也落盘' },
+  { type: 'step/start', note: '开 step 1：一次模型调用加它请求的工具执行' },
+  { type: 'user/message', note: '你的提问进入模型可见历史', surface: true },
+  { type: 'request/header', note: '本步请求的完整配置快照，log-only' },
+  { type: 'assistant/chunk', note: '流式 token 逐块落盘，回放保真但不进历史' },
+  { type: 'assistant/message', note: '组装完成的 assistant 消息（带 usage）', surface: true },
+  { type: 'tool/call', note: '模型请求调 bash：留档配对，不进历史' },
+  { type: 'tool/result', note: '工具结果进入历史，sourceEventSeqs 回链 call', surface: true },
+  { type: 'step/end', note: '关 step 1' },
+  { type: 'turn/end', note: '关 turn 1，reason 记录结局' },
+]} title="一个真实 turn 的事件时间之河" />
+
+蓝点进 surface，白点只留在日志。数一下：11 条事件里只有 3 条会被模型看到——但模型看到的三条，能从这 11 条里一字不差地重建出来。
+
+## 运行机制图
+
+<MermaidDiagram title="重启恢复：状态是历史的投影" caption="进程重启不加载任何「状态文件」，只回放日志">
+  flowchart TB
+    DISK["磁盘上的持久化日志<br/>SQLite 或 JSONL"]
+    CHECK["版本检查<br/>SESSION_FORMAT_VERSION"]
+    REPLAY["回放事件流"]
+    S1["surface 折叠<br/>得出模型可见历史"]
+    S2["Inbox 重放<br/>agent/inbox/spliced 恢复待办队列"]
+    S3["requestHeader 折叠<br/>恢复上次请求配置"]
+    READY["Session 就绪<br/>派生状态与崩溃前一致"]
+    DISK --> CHECK --> REPLAY
+    REPLAY --> S1 --> READY
+    REPLAY --> S2 --> READY
+    REPLAY --> S3 --> READY
+</MermaidDiagram>
+
+<MermaidDiagram title="中断修复：给摔断的尾巴补上边界" caption="repair.ts 为崩在半路的事件补齐收尾，provider 才肯接受 transcript">
+  sequenceDiagram
+    participant D as 磁盘日志（崩溃尾巴）
+    participant R as interruptedTurnClosers
+    participant L as 修复后的日志
+    D->>R: 扫描：发现 open turn、open step、<br/>pending 的 tool-call
+    R->>L: 补 tool/result（isError，<br/>TOOL_OUTCOME_UNKNOWN）
+    R->>L: 补 step/end
+    R->>L: 补 turn/end（reason: interrupted）
+    Note over L: 合成事件复用最后一条真实事件的时间戳<br/>绝不编造「未来时间」
+</MermaidDiagram>
+
+补出来的合成 `tool/result` 文本也写得很讲究：告诉模型「这个工具调用被中断了、结局未知」，并明确叮嘱**只读或幂等的操作才可以重试，有副作用的先核实外部状态或问用户**。崩溃恢复不是假装无事发生，而是把不确定性诚实地写进历史。
+
+## 动手实验
+
+1. **数一数时间之河**（需要 `DEEPSEEK_API_KEY`）：跑 `pnpm dsh --profile headless "用 bash 工具列出当前目录"`，完成后找到持久化的会话日志，统计事件类型分布——你会看到大量 `assistant/chunk`，而带 `surfaceOp` 的只有三类。
+2. **验证铁律**（需要 key）：在任意插件里挂 `ctx.on('llm/stream', ...)`，偷偷往 `options.messages` 里塞一条没落盘的消息再 `return next()`——invariant 立刻 fail，报 `log-reconstruction desync`。这条铁律不接受贿赂。
+3. **亲手玩一次修复**：在 Node REPL 里 `import { interruptedTurnClosers }` 自 `dsh-session/repair`，喂给它一段手工截断的事件数组（`turn/start`、`step/start`、一条带 tool-call 的 `assistant/message`），观察它返回的三个合成收尾事件。
+4. **无需 key 的回放体验**：`pnpm run test:snapshot` 的整套回放机制，本质上就是「从日志重建一切」的实战演示。
+
+## 胖虎翻车现场
+
+> 胖虎：「模型总提我上周说错的那句话，我直接改了日志文件，把那行里的错字修了！结果 dsh 再也打不开这个会话了！」
+
+当然打不开。append-only 的意思不是「建议别改」，而是**所有派生状态都信任日志不可变**：`seq` 是下标、`sourceEventSeqs` 按下标回链、surface 的 replace 区间按下标计算、缓存按代际失效。你改了一个字节，整条证据链全部对不上，加载时的校验会诚实地拒绝这份被动过手脚的历史。
+
+想「修正」历史，唯一合法的姿势是追加新事件——比如 compaction 的 `replace` 操作：旧内容还在日志里，只是不再投影给模型。连遗忘都是一次 append。
+
+## 小结卡
+
+- Session 日志是**只增不改的真相源**；`seq` 连续、事件深冻结、append 先落日志再发通知。
+- **只有三类事件进 surface**：`user/message` / `assistant/message` / `tool/result`；`tool/call` 留档不进历史；compaction 用 `replace` 瘦身。
+- 「model-visible ⟺ logged」由 `llm/stream` 上的 invariant 强制执行：请求 messages 必须逐字节等于 `deriveMessages()` 的重建结果。
+- `SESSION_FORMAT_VERSION = 0`：结构性变更才 bump，普通新事件靠 `ignorable` 扩展（declaration merging 到 `dsh-session/types`）。
+- 重启 = 回放日志派生全部状态；崩在半路 = `interruptedTurnClosers` 合成收尾事件补平 transcript。
+- 下一章：谁在往这条河里倒水——`ReactLoopAgent` 的 turn / step / inbox 编排。
+
+</Chapter>

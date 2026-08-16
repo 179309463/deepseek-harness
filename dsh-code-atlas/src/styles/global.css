@@ -1,0 +1,367 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dora: #2b9fe3;
+  --color-dora-deep: #1b5faa;
+  --color-paper: #faf6ee;
+  --color-ink: #222222;
+  --color-accent: #ff8c42;
+  --color-card: #ffffff;
+  --color-mist: #eef4fa;
+  --color-danger: #e5534b;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: only light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-paper);
+  background-image: radial-gradient(circle, rgba(43, 159, 227, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.75;
+}
+
+/* 卡片 / 精读卡：浅蓝细边 + 轻阴影，不抢内容焦点 */
+.comic-card,
+.read-card {
+  background: var(--color-card);
+  border: 1px solid #d5e3f0;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(27, 95, 170, 0.06);
+}
+
+.comic-card-hover {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.comic-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(27, 95, 170, 0.1);
+}
+
+/* 对话框气泡：微信/飞书式，尾巴朝向头像 */
+.speech-bubble {
+  position: relative;
+  background: var(--color-card);
+  border: 1px solid #d5e3f0;
+  border-radius: 14px;
+  padding: 0.85rem 1.05rem;
+  display: inline-block;
+  max-width: 100%;
+  box-shadow: 0 4px 14px rgba(27, 95, 170, 0.05);
+}
+
+.bubble-other {
+  border-top-left-radius: 4px;
+}
+
+.bubble-mine {
+  background: #fff4ea;
+  border-color: #f0d4bc;
+  border-top-right-radius: 4px;
+}
+
+.bubble-other::before,
+.bubble-mine::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border: 1px solid #d5e3f0;
+  transform: rotate(45deg);
+}
+
+.bubble-other::before {
+  left: -5px;
+  border-right: none;
+  border-top: none;
+}
+
+.bubble-mine::before {
+  right: -5px;
+  border-left: none;
+  border-bottom: none;
+  border-color: #f0d4bc;
+  background: #fff4ea;
+}
+
+/* 代码块容器 */
+.code-frame {
+  border: 1px solid #d5e3f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f6f8fa;
+}
+
+.code-frame pre {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  overflow-x: hidden !important;
+  white-space: normal;
+  background: transparent !important;
+  font-family: var(--font-mono);
+}
+
+.code-frame code {
+  counter-reset: line;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 标题装饰：蓝色下划波浪 */
+.section-title {
+  display: inline-block;
+  border-bottom: 4px solid var(--color-dora);
+  padding-bottom: 2px;
+}
+
+/* MDX 正文排版 */
+.prose-atlas h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-top: 2.6rem;
+  margin-bottom: 1rem;
+  color: var(--color-dora-deep);
+}
+
+.prose-atlas h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 0.7rem;
+}
+
+/* 精读卡片标题：压过 .prose-atlas h3 的上下外边距，保证垂直居中 */
+.read-card > header {
+  display: flex;
+  align-items: center;
+  min-height: 3.25rem;
+  padding: 0.75rem 1.25rem;
+}
+
+.read-card > header h3,
+.comic-card > header h3 {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.prose-atlas p {
+  margin: 0.8rem 0;
+}
+
+.prose-atlas ul,
+.prose-atlas ol {
+  margin: 0.8rem 0;
+  padding-left: 1.4rem;
+}
+
+.prose-atlas li {
+  margin: 0.35rem 0;
+}
+
+.prose-atlas ul {
+  list-style: disc;
+}
+
+.prose-atlas ol {
+  list-style: decimal;
+}
+
+.prose-atlas code:not(pre code) {
+  background: var(--color-mist);
+  color: var(--color-dora-deep);
+  border-radius: 6px;
+  padding: 0.12em 0.4em;
+  font-size: 0.88em;
+  font-family: var(--font-mono);
+}
+
+.prose-atlas table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2rem 0;
+  font-size: 0.9rem;
+  background: var(--color-card);
+}
+
+.prose-atlas th,
+.prose-atlas td {
+  border: 1.5px solid #d5e3f0;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose-atlas th {
+  background: var(--color-mist);
+  font-weight: 700;
+}
+
+.prose-atlas blockquote {
+  border-left: 4px solid var(--color-accent);
+  background: #fff7f0;
+  padding: 0.7rem 1rem;
+  margin: 1.2rem 0;
+  border-radius: 0 10px 10px 0;
+}
+
+.prose-atlas strong {
+  color: var(--color-dora-deep);
+}
+
+/* 精读逐字：未出现的字不占位，段落随打字长高；行内代码底等字出现再亮 */
+.tw-ch {
+  display: none;
+}
+
+.tw-ch.is-on,
+.typewriter-prose[data-tw="done"] .tw-ch {
+  display: inline;
+}
+
+.typewriter-prose[data-tw="pending"]::before {
+  content: "AI正在分析中";
+  display: inline-block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1b5faa;
+  letter-spacing: 0.04em;
+  animation: tw-analyze 1.2s ease-in-out infinite;
+}
+
+.typewriter-prose[data-tw="pending"]::after {
+  content: "";
+  display: inline-block;
+  width: 1.15em;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1b5faa;
+  animation: tw-analyze-dots 1.4s steps(4, end) infinite;
+}
+
+.typewriter-prose[data-tw="pending"] > *,
+.typewriter-prose [data-tw-block="wait"] {
+  display: none;
+}
+
+@keyframes tw-analyze {
+  50% { opacity: 0.45; }
+}
+
+@keyframes tw-analyze-dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+
+.typewriter-prose[data-tw="running"] :is(ul, ol):not(:has([data-tw-block="active"])):not(:has([data-tw-block="done"])) {
+  display: none;
+}
+
+.typewriter-prose[data-tw="running"] code:not(pre code):not(:has(.is-on)),
+.typewriter-prose[data-tw="pending"] code:not(pre code) {
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tw-ch.tw-caret::after {
+  content: "";
+  display: inline-block;
+  width: 0.08em;
+  height: 0.95em;
+  margin-left: 0.04em;
+  background: currentColor;
+  vertical-align: -0.08em;
+  animation: tw-blink 0.7s step-end infinite;
+}
+
+@keyframes tw-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-ch,
+  .typewriter-prose[data-tw] .tw-ch {
+    display: inline;
+  }
+  .tw-ch.tw-caret::after {
+    display: none;
+  }
+  .typewriter-prose[data-tw="pending"] > *,
+  .typewriter-prose [data-tw-block="wait"] {
+    display: revert;
+  }
+  .typewriter-prose[data-tw="pending"]::before,
+  .typewriter-prose[data-tw="pending"]::after {
+    content: none;
+    animation: none;
+  }
+}
+
+/*
+  橙底 / 蓝底必须配白字。
+  Tailwind 的 text-white 在 @layer utilities 里，会被正文未分层的 color 盖掉，
+  所以这里用未分层 + !important，并锁住 -webkit-text-fill-color。
+*/
+.bg-accent,
+.on-accent {
+  background-color: #ff8c42 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.bg-dora,
+.bg-dora-deep {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* 章节头：压过 .prose-atlas 的 h1/p 外边距，上下内边距对称 */
+.chapter-hero {
+  padding: 1.5rem 1.5rem;
+}
+
+.chapter-hero h1,
+.chapter-hero p {
+  margin: 0;
+}
+
+.chapter-hero h1 {
+  margin-top: 0.35rem;
+}
+
+.chapter-hero p {
+  margin-top: 0.5rem;
+}
+
+/* Mermaid 容器 */
+.mermaid-frame {
+  background: var(--color-card);
+  border: 1px solid #d5e3f0;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(27, 95, 170, 0.06);
+  padding: 1.1rem 1.2rem;
+  margin: 1.4rem 0;
+  overflow-x: auto;
+}
+
+.mermaid-frame svg {
+  max-width: 100%;
+  margin: 0 auto;
+  display: block;
+}

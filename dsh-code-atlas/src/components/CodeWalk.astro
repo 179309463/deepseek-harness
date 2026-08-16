@@ -1,0 +1,220 @@
+---
+import SourceRef from './SourceRef.astro';
+
+interface Props {
+  file: string;
+  lines?: string;
+  symbol?: string;
+  title: string;
+}
+
+const { file, lines, symbol, title } = Astro.props;
+const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0;
+---
+
+<section class="read-card my-8 overflow-hidden">
+  <header class="flex items-center gap-3 border-b border-[#e4eef6] bg-mist/80 px-5">
+    <span class="on-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold leading-none" style="color:#fff;-webkit-text-fill-color:#fff">读</span>
+    <div class="min-w-0 flex-1">
+      <h3 class="m-0 text-lg font-extrabold leading-7 text-dora-deep">{title}</h3>
+    </div>
+  </header>
+  <div class="border-b border-ink/10 bg-card px-5 py-2.5">
+    <SourceRef file={file} lines={lines} symbol={symbol} />
+  </div>
+
+  <div class="p-5">
+    <!-- ② 双栏：左源码（sticky）右精读，栏目标签引导阅读顺序 -->
+    <div class="grid gap-5 lg:grid-cols-[7fr_5fr]">
+      <div class="min-w-0 self-start lg:sticky lg:top-20">
+        <div class="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink/50">
+          <span class="rounded bg-dora px-1.5 py-0.5 text-[10px] font-bold" style="color:#fff;-webkit-text-fill-color:#fff">① 源码</span>
+          先读这段真实代码
+        </div>
+        <div class="code-frame" style={`--line-start: ${lineStart}`}>
+          <div class="flex items-center gap-1.5 border-b border-[#e4eef6] bg-[#eaeff5] px-3 py-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-[#ff5f57]"></span>
+            <span class="h-2.5 w-2.5 rounded-full bg-[#febc2e]"></span>
+            <span class="h-2.5 w-2.5 rounded-full bg-[#28c840]"></span>
+            <span class="ml-2 truncate font-mono text-[11px] text-ink/50">{file}{lines && `:${lines}`}</span>
+          </div>
+          <slot name="code" />
+        </div>
+      </div>
+      <div class="min-w-0">
+        <div class="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink/50">
+          <span class="on-accent rounded px-1.5 py-0.5 text-[10px] font-bold" style="color:#fff;-webkit-text-fill-color:#fff">② 精读</span>
+          <button type="button" class="typewriter-replay cursor-pointer border-0 bg-transparent p-0 font-bold text-dora-deep hover:text-dora">再读逐段讲解</button>
+        </div>
+        <div class="prose-atlas typewriter-prose text-[0.95rem]" data-tw="pending">
+          <slot />
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* 行号：Shiki 把每行包成 .line，用 CSS counter 从真实起始行号编号。
+     pre/code/.line 均来自 slot（MDX 渲染），必须整条 :global。
+     code 用 flex 列，避免 pre 折行时把行与行之间的换行符画成空行。 */
+  :global(.code-frame pre code) {
+    counter-reset: line var(--line-start, 0);
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(.code-frame pre code .line) {
+    display: block;
+    min-height: 1.65em;
+    padding-left: 3.6em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  :global(.code-frame pre code .line)::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 2.6em;
+    margin-left: -3.6em;
+    margin-right: 1em;
+    text-align: right;
+    color: rgba(34, 34, 34, 0.35);
+    font-size: 0.78em;
+    user-select: none;
+  }
+</style>
+
+<script>
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BLOCK_SEL = ':scope > p, :scope > ol > li, :scope > ul > li, :scope > blockquote, :scope > h2, :scope > h3, :scope > h4';
+  const gens = new WeakMap<HTMLElement, number>();
+
+  function wrapText(root: Element) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for (const node of nodes) {
+      if (node.parentElement?.classList.contains('tw-ch')) continue;
+      const text = node.textContent ?? '';
+      if (text.length === 0) continue;
+      const frag = document.createDocumentFragment();
+      for (const ch of text) {
+        const span = document.createElement('span');
+        span.className = 'tw-ch';
+        span.textContent = ch;
+        frag.appendChild(span);
+      }
+      node.parentNode?.replaceChild(frag, node);
+    }
+  }
+
+  function markBlocks(root: HTMLElement) {
+    return [...root.querySelectorAll<HTMLElement>(BLOCK_SEL)].map((block) => {
+      block.dataset.twBlock = 'wait';
+      return block;
+    });
+  }
+
+  function reset(el: HTMLElement) {
+    for (const ch of el.querySelectorAll('.tw-ch')) {
+      ch.classList.remove('is-on', 'tw-caret');
+    }
+    markBlocks(el);
+  }
+
+  function play(el: HTMLElement) {
+    const gen = (gens.get(el) ?? 0) + 1;
+    gens.set(el, gen);
+    const blocks = markBlocks(el);
+    el.dataset.tw = 'running';
+    let n = 0;
+
+    const typeChars = (chars: HTMLElement[], done: () => void) => {
+      let i = 0;
+      let prev: HTMLElement | undefined;
+      const step = () => {
+        if (gens.get(el) !== gen) return;
+        if (i >= chars.length) {
+          prev?.classList.remove('tw-caret');
+          done();
+          return;
+        }
+        prev?.classList.remove('tw-caret');
+        const ch = chars[i];
+        ch.classList.add('is-on', 'tw-caret');
+        prev = ch;
+        const t = ch.textContent ?? '';
+        i += 1;
+        const wait = /[。！？]/.test(t) ? 160 : /[；：，、]/.test(t) ? 70 : 18;
+        window.setTimeout(step, wait);
+      };
+      step();
+    };
+
+    const next = () => {
+      if (gens.get(el) !== gen) return;
+      if (n >= blocks.length) {
+        el.dataset.tw = 'done';
+        return;
+      }
+      const block = blocks[n];
+      block.dataset.twBlock = 'active';
+      n += 1;
+      typeChars([...block.querySelectorAll<HTMLElement>('.tw-ch')], () => {
+        block.dataset.twBlock = 'done';
+        next();
+      });
+    };
+    next();
+  }
+
+  function replay(el: HTMLElement) {
+    gens.set(el, (gens.get(el) ?? 0) + 1);
+    reset(el);
+    el.dataset.tw = 'pending';
+    play(el);
+  }
+
+  const roots = document.querySelectorAll<HTMLElement>('.typewriter-prose');
+  if (reduceMotion) {
+    for (const el of roots) el.dataset.tw = 'done';
+  } else {
+    for (const el of roots) {
+      wrapText(el);
+      markBlocks(el);
+      el.dataset.tw = 'pending';
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const el = entry.target as HTMLElement;
+          if (el.dataset.tw !== 'pending') continue;
+          io.unobserve(el);
+          window.setTimeout(() => {
+            if (el.dataset.tw !== 'pending') return;
+            play(el);
+          }, 500);
+        }
+      },
+      { threshold: 0.45, rootMargin: '0px 0px -12% 0px' },
+    );
+    for (const el of roots) io.observe(el);
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('.typewriter-replay').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prose = btn.closest('.min-w-0')?.querySelector<HTMLElement>('.typewriter-prose');
+      if (!prose) return;
+      if (reduceMotion) {
+        prose.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+      replay(prose);
+      prose.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+</script>

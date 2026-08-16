@@ -1,0 +1,265 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="01"
+  title="插件宇宙观"
+  subtitle="Context、Fiber、effect/dispose、事件总线——「一切皆插件」这五个字，在 vendored Cordis 里到底是哪几行代码"
+  next={{ slug: '02-loader', title: '02 装载与卸载' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦，我读了三天 dsh 的 README，还是不懂「一切皆插件」到底是什么意思……工具是插件？审批是插件？连 agent 自己都是插件？' },
+  { who: 'doraemon', text: '别背概念了。今晚我们直接钻进代码里——Cordis 内核一共就五个文件，读完你就站在宇宙中心了。' },
+  { who: 'nobita', text: '五个文件？！一个框架的内核只有五个文件？' },
+  { who: 'doraemon', text: '对。而且你要记住一句话：在这个宇宙里，注册就是副作用，卸载就是逆序撤销。出发！' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="Cordis 内核五文件关系图" caption="Context 是门面，真正干活的是背后四个服务">
+  flowchart TB
+    subgraph CTX["vendor/cordis/src/context.ts"]
+      C["Context（Proxy 门面）"]
+    end
+    subgraph SVC["四个内建服务"]
+      R["reflect.ts<br/>ReflectService：mixin 方法到 ctx"]
+      F["fiber.ts<br/>Fiber：插件生命周期 + effect/dispose"]
+      G["registry.ts<br/>RegistryService：plugin / inject"]
+      E["events.ts<br/>EventsService：emit / waterfall 五模式"]
+    end
+    P["你的插件<br/>export function apply(ctx, config)"] --> G
+    G --> F
+    C --> R
+    R --> F
+    R --> G
+    R --> E
+</MermaidDiagram>
+
+| 文件 | 行数 | 本章要回答的问题 |
+|---|---|---|
+| `vendor/cordis/src/context.ts` | ~146 | 根 Context 是什么？为什么构造函数返回的是 Proxy？ |
+| `vendor/cordis/src/reflect.ts` | ~418 | `ctx.effect` / `ctx.on` 这些方法到底从哪冒出来的？ |
+| `vendor/cordis/src/fiber.ts` | ~754 | 插件的出生、激活、死亡由谁管理？ |
+| `vendor/cordis/src/registry.ts` | ~337 | `ctx.plugin()` 注册一个插件时发生了什么？ |
+| `vendor/cordis/src/events.ts` | ~352 | waterfall 为什么「不调 next() 就是否决」？ |
+
+## 源码深潜
+
+<CodeWalk file="vendor/cordis/src/context.ts" lines="69-84" symbol="Context.constructor" title="精读 1：宇宙大爆炸——根 Context 的诞生">
+
+<div slot="code">
+
+```ts
+
+  /** Create the root context and install the built-in services. */
+  constructor() {
+    this[symbols.isolate] = Object.create(null)
+    this[symbols.intercept] = Object.create(null)
+    const self = new Proxy<this>(this, ReflectService.handler)
+    this.root = self
+    this.baseUrl = undefined
+    this.fiber = new Fiber(self, {}, Object.create(null), null, () => [])
+    this.reflect = new ReflectService(self)
+    this.registry = new RegistryService(self)
+    this.events = new EventsService(self)
+    this.logger = new LoggerService(self)
+    this.fiber._disposables.clear()
+    return self
+  }
+```
+
+</div>
+
+这是整个 dsh 宇宙的「大爆炸奇点」。注意三个反直觉的设计：
+
+- **构造函数返回的不是 `this`，而是 `new Proxy(this, ReflectService.handler)`**。这意味着你拿到的每一个 `ctx`，读属性时都会经过反射层——服务查找、依赖追踪、隔离标签，全部藏在这一层 Proxy 里。
+- **根 Fiber 的 `runtime` 是 `null`**。Fiber 是插件的生命周期载体，根 Fiber 是「宇宙本身」的载体——它不属于任何插件，所以运行时引用为空。
+- 四个内建服务（reflect / registry / events / logger）在构造时就挂好，它们自己也运行在这套机制之上——**内核是自举的**。
+
+大雄问：为什么要 Proxy 而不是普通类？因为 `ctx.shell` 这种写法必须动态解析——`shell` 服务由哪个插件提供，是运行时才知道的事。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/cordis/src/reflect.ts" lines="218-222" symbol="ReflectService" title="精读 2：ctx.effect 根本不是 Context 的方法">
+
+<div slot="code">
+
+```ts
+
+    this.mixin('reflect', ['get', 'set', 'provide', 'accessor', 'mixin'])
+    this.mixin('fiber', ['runtime', 'effect'])
+    this.mixin('registry', ['inject', 'plugin'])
+    this.mixin('events', ['on', 'once', 'parallel', 'emit', 'serial', 'bail', 'waterfall'])
+```
+
+</div>
+
+dsh 插件里随处可见的 `ctx.effect(...)`、`ctx.on(...)`、`ctx.waterfall(...)`，**没有一个是 Context 自己的方法**。这四行 mixin 才是真相：
+
+- `ctx.effect(...)` ≡ `ctx.fiber.effect(...)`——注册副作用，找当前插件的 Fiber
+- `ctx.on(...)` / `ctx.waterfall(...)` ≡ `ctx.events.*`——事件系统
+- `ctx.plugin(...)` / `ctx.inject(...)` ≡ `ctx.registry.*`——插件注册表
+
+这就是为什么 dsh 的插件上下文看起来像「什么都有」：它是一个**把所有服务的能力混合到一个门面**的 Proxy。新手最大的误区是去 `context.ts` 里找 `effect` 的实现——那里根本没有。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/cordis/src/fiber.ts" lines="415-422" symbol="Fiber.effect" title="精读 3：effect——注册即副作用，卸载即逆序撤销">
+
+<div slot="code">
+
+```ts
+  effect(execute: () => SyncEffect, label?: string): Disposable<Promise<void>>
+  /** Same as above for async effects; the disposer is also awaitable. */
+  effect(execute: () => Effect, label?: string): AsyncDisposable<Promise<void>>
+  effect(execute: () => Effect, label = 'anonymous'): any {
+    this.assertActive()
+    if (this.state === FiberState.UNLOADING) {
+      throw new CordisError('INACTIVE_EFFECT')
+    }
+```
+
+</div>
+
+「一切皆插件」的真正含义，落到代码里就是这一句话：**插件的一切对外贡献都必须通过 `ctx.effect()` 登记**。
+
+`effect` 的契约：
+
+1. `execute` **立即执行**——你注册的工具、监听器、服务，马上生效。
+2. `execute` 返回的清理函数（generator 则有多个 yield 点）被收进 `_disposables`，插件卸载时**严格逆序**调用（427–441 行）。
+3. 正在卸载（`UNLOADING`）的 Fiber 禁止新建 effect——`INACTIVE_EFFECT` 直接抛错。这杜绝了「边拆房子边装修」的竞态。
+
+还有一个防御细节（517–522 行）：disposer 的 wrapper **先**入栈、**后**执行插件代码。这样即使插件代码执行到一半触发了重入卸载，清理链也不会漏掉这个尚未完成的 effect。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/cordis/src/events.ts" lines="234-243" symbol="EventsService.waterfall" title="精读 4：waterfall——dsh 所有「拦截与审批」的发动机">
+
+<div slot="code">
+
+```ts
+  waterfall(...args: any[]) {
+    const cbs = this.dispatch('waterfall', args)
+    const inner = args.pop()
+    const next = () => {
+      const cb = cbs.shift() ?? inner
+      return cb(...args)
+    }
+    args.push(next)
+    return next()
+  }
+```
+
+</div>
+
+这 10 行是 dsh 里审批、提示词组装、工具拦截等所有「链式决策」的发动机。拆开看：
+
+- `args.pop()`——**调用者传入的最后一个参数不是数据，是最内层的 `next`**，通常是内建行为（比如「真正执行这个工具」）。
+- 每个监听器拿到的最后一个实参是 `next`：调用它 = 委托给下一个监听器；**不调用 = 整条链就此 veto，包括内建行为**。
+- 于是监听器形成洋葱结构：外层可以做前置检查 → `await next()` → 拿到结果后还能做后置加工。
+
+胖虎最常踩的坑：写一个「只是看看」的监听器却忘了 `return next()`——结果整条链被它无声地掐断。仓库规约因此写明：waterfall 监听器必须委托，除非你的目的就是否决。
+
+对比其他四种模式：`emit` 火后不管、`parallel` 并发等待、`serial` 顺序执行直到有人 bail、`bail` 是它的同步版。只有 waterfall 是「包装」语义。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/cordis/src/registry.ts" lines="316-336" symbol="RegistryService.plugin" title="精读 5：ctx.plugin()——一个插件的出生证明">
+
+<div slot="code">
+
+```ts
+  plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack()) {
+    // check if it's a valid plugin
+    const callback = this.resolve(plugin)
+    if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)
+    this.ctx.fiber.assertActive()
+
+    let runtime = this._internal.get(callback)
+    if (!runtime) {
+      let name = plugin.name
+      if (name === 'apply') name = undefined
+      runtime = { name, callback, fibers: new DisposableList(), Config: plugin.Config }
+      this._internal.set(callback, runtime)
+    }
+
+    const fiber = new Fiber(this.ctx, config, Inject.resolve(plugin.inject), runtime, getOuterStack)
+    const wrapped = Object.create(fiber) as Fiber & PromiseLike<Fiber>
+    wrapped.then = (onFulfilled, onRejected) => {
+      return fiber.await().then(onFulfilled, onRejected)
+    }
+    return wrapped
+  }
+```
+
+</div>
+
+注册一个插件的全过程：
+
+1. `resolve` 兼容三种形态：函数、`{ apply }` 对象、class（`resolve` 本身在同文件 222–227 行；class 构造函数形态在 `fiber.ts` 247–261 行分派）。
+2. **runtime 按 callback 缓存**——同一个插件被多处挂载时共享 runtime，各自持有独立 Fiber。dsh 的 `dsh-base` 与 preset 能复用同一插件包，靠的就是这层。
+3. 每个挂载点创建一个新 **Fiber**，带着自己的 config 和 `inject` 依赖清单。
+4. 返回值被包了一层 `PromiseLike`——`await ctx.plugin(...)` 等的是插件真正激活（依赖齐全、apply 跑完）。
+
+注意 `Inject.resolve(plugin.inject)`：如果插件声明了 `inject: ['shell']` 而 shell 服务还没出现，Fiber 会停在 `INACTIVE` 状态等着——**依赖驱动的激活**由此开始。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="Fiber 生命周期活动图" caption="依赖不齐就一直等；卸载时逆序跑 disposers">
+  stateDiagram-v2
+    [*] --> INACTIVE: new Fiber（inject 未齐）
+    INACTIVE --> LOADING: 所需服务 provide 出现
+    LOADING --> ACTIVE: apply/constructor 执行成功
+    LOADING --> FAILED: 插件体抛错
+    ACTIVE --> UNLOADING: dispose 或依赖消失
+    FAILED --> UNLOADING: dispose
+    UNLOADING --> DISPOSED: 逆序执行全部 disposer
+    UNLOADING --> INACTIVE: 依赖仍被引用（PENDING 重生）
+</MermaidDiagram>
+
+<MermaidDiagram title="一次 waterfall 审批链时序" caption="以 tools/pre-execute 为例：B 不调 next，内建执行被否决">
+  sequenceDiagram
+    participant P as 生产者（tools）
+    participant E as EventsService
+    participant A as 监听器 A（日志）
+    participant B as 监听器 B（审批策略）
+    participant I as 内建 next（真实执行）
+    P->>E: waterfall('tools/pre-execute', req, 内建)
+    E->>A: 调用 A(req, next)
+    A->>B: return next() → 调用 B(req, next)
+    B--xI: 不调 next()：veto
+    B-->>A: 返回拒绝决策
+    A-->>E: 返回拒绝决策
+    E-->>P: 拒绝
+</MermaidDiagram>
+
+## 动手实验
+
+在仓库根目录验证本章结论（需要 `DEEPSEEK_API_KEY` 的实验已标注）：
+
+1. **看插件树自检**：`pnpm dsh --profile headless --dump-config`，观察输出的分层注释——每一行插件都能对应到一个 Fiber。
+2. **验证 waterfall veto**：在任意示例插件里挂 `ctx.on('tools/pre-execute', (req, next) => { console.log('路过'); })`（故意不调 `next()`），然后让 agent 调用 bash 工具——工具会静默不执行。加上 `return next()` 后恢复。
+3. **验证逆序卸载**：给插件注册两个 effect，分别打印 `setup A/B` 和 `dispose A/B`，热更新它的配置触发重载，观察 dispose 顺序是 B→A。
+
+## 胖虎翻车现场
+
+> 胖虎：「我给 `ctx.loader.start()` 写了个调用，编辑器没报错，运行直接炸！」
+
+本仓库的 vendored Loader **没有** `loader.start()` 这个 API。真实路径是：`Entry.init` → `Entry._start` → `ctx.registry.plugin(...)`（entry.ts 291–301 行）。运行时想新增插件，用 `ctx.loader.create(...)`（`EntryTree.create`，tree.ts 97–104 行）；想换插件，是 dispose 旧的 + create 新的，而不是给旧的「restart」。
+
+## 小结卡
+
+- Context 是 Proxy 门面；`ctx.effect/on/plugin/waterfall` 全部来自 reflect 的 mixin，真身分别在 fiber/events/registry。
+- **注册即副作用**：所有贡献走 `ctx.effect`，清理函数逆序执行，`UNLOADING` 状态拒绝新建。
+- waterfall 的最后一个参数是内建行为；监听器不调 `next()` 就是否决。
+- `ctx.plugin()` 为每个挂载点创建 Fiber，依赖（inject）不齐则停在 INACTIVE 等待。
+- 下一章：这些 Fiber 是怎么从 YAML 配置里长出来的——Loader 与插件树。
+
+</Chapter>

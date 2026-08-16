@@ -1,0 +1,64 @@
+---
+interface Props {
+  title?: string;
+  caption?: string;
+}
+
+const { title, caption } = Astro.props;
+---
+
+<figure class="mermaid-frame">
+  {title && (
+    <figcaption class="mb-2 flex items-center gap-2 font-bold text-dora-deep">
+      <span class="inline-block h-3 w-3 rounded-full bg-accent"></span>
+      {title}
+    </figcaption>
+  )}
+  <pre class="mermaid-source hidden"><slot /></pre>
+  <div class="mermaid-render" aria-label={title ?? '架构图'}></div>
+  {caption && <p class="mt-2 text-center text-sm text-ink/60">{caption}</p>}
+</figure>
+
+<script>
+  import mermaid from 'mermaid';
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'base',
+    themeVariables: {
+      background: '#ffffff',
+      primaryColor: '#eef4fa',
+      primaryBorderColor: '#b7d0e6',
+      primaryTextColor: '#222222',
+      lineColor: '#2b9fe3',
+      secondaryColor: '#faf6ee',
+      tertiaryColor: '#ffffff',
+      actorBorders: '#b7d0e6',
+      actorLineColor: '#2b9fe3',
+      signalColor: '#222222',
+      signalTextColor: '#222222',
+      noteBkgColor: '#fff7f0',
+      noteBorderColor: '#ff8c42',
+      fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', htmlLabels: true },
+    sequence: { showSequenceNumbers: true, actorMargin: 60 },
+  });
+
+  let seq = 0;
+  for (const frame of document.querySelectorAll<HTMLElement>('.mermaid-frame')) {
+    const source = frame.querySelector('.mermaid-source');
+    const target = frame.querySelector('.mermaid-render');
+    if (!source || !target) continue;
+    const code = source.textContent?.trim() ?? '';
+    if (!code) continue;
+    try {
+      const { svg } = await mermaid.render(`atlas-mmd-${seq++}`, code);
+      target.innerHTML = svg;
+    } catch (err) {
+      target.innerHTML = `<p style="color:#e5534b;font-size:0.85rem">图表渲染失败：${String(err)}</p>`;
+    }
+  }
+</script>

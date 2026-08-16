@@ -1,0 +1,358 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="09"
+  title="走向生产"
+  subtitle="ACP 与 JSON-RPC SDK 两条对外协议共用一根「每行一条 JSON」的水管；keyless 快照、100% 覆盖率门与 doc-sync——从玩具到生产线的最后一块拼图"
+  prev={{ slug: '08-self-mod-compaction', title: '08 自改装与瘦身' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦，我的 agent 在终端里跑得可好了！现在我想把它接进 IDE、接进 CI，还想让别的程序用脚本来驱动它——总不能让大家围着看终端动画吧？' },
+  { who: 'doraemon', text: '所以要走向生产。对 IDE 和平台走 ACP 自动化协议，对自家脚本走 JSON-RPC SDK；两条线共用同一根水管——每行一条 JSON 的流式传输。' },
+  { who: 'nobita', text: '那质量怎么保证？模型每次回答都不一样，难道靠玄学测试？' },
+  { who: 'doraemon', text: '把模型的真实回答录成「电影胶片」，以后不要 key 也能回放比对——这叫 keyless 快照测试。再配上 100% 覆盖率门和二十多个文档同步门当质检流水线。最后一课，开工！' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="两条协议线与一套质检流水线" caption="ACP 与 SDK 是两种方言，共用 JsonRpcLineTransport 这根水管；gates 在仓库边界把关">
+  flowchart TB
+    subgraph CLIENTS["外部世界"]
+      IDE["IDE / 平台客户端<br/>讲 ACP 方言"]
+      APP["自家脚本<br/>TypeScript / Python SDK"]
+    end
+    subgraph WIRE["协议层 packages/acp · packages/sdk"]
+      ACP["acp/src/index.ts<br/>ACP server 插件"]
+      TYPES["sdk/protocol/types.ts<br/>方法族类型地图"]
+      TRANS["sdk/protocol/transport.ts<br/>JsonRpcLineTransport"]
+      SRV["sdk/server/server.ts<br/>HarnessSdkJsonRpcServer"]
+      CLI["sdk/client/api.ts<br/>DeepSeekHarness / HarnessSession"]
+    end
+    subgraph CORE["dsh 运行时"]
+      AGENTS["ctx.agents / session/event<br/>approval/request"]
+    end
+    subgraph GATES["工程纪律 scripts/run-gates.ts"]
+      COV["test:coverage<br/>per-file 100%"]
+      SNAP["test:snapshot<br/>keyless 回放"]
+      DOC["doc-sync<br/>二十多个文档门"]
+    end
+    IDE -- "stdio ndjson" --> ACP
+    APP -- "JSON-RPC 行协议" --> CLI
+    CLI --> TRANS --> SRV
+    ACP --> AGENTS
+    SRV --> AGENTS
+    GATES -.把关.-> CORE
+</MermaidDiagram>
+
+| 文件 | 关键行 | 本章要回答的问题 |
+|---|---|---|
+| `packages/acp/acp/src/index.ts` | 105-415 | ACP server 插件：哪些事件上自动化线路？prompt 如何结算？ |
+| `packages/sdk/protocol/src/types.ts` | 16-105 | SDK 的三个请求与四个通知各长什么样？ |
+| `packages/sdk/protocol/src/transport.ts` | 62-269 | 行协议如何分帧、配对、报错？ |
+| `packages/sdk/server/src/server.ts` | 53-240 | initialize / prompt / shutdown 的服务端实现 |
+| `packages/sdk/client/src/api.ts` | 22-246 | DeepSeekHarness / HarnessSession 高级 API 怎么封装？ |
+| `scripts/run-gates.ts` | 192-243、497-528 | gates 清单与依赖图调度器怎么组织？ |
+| 根 `package.json` 的 scripts | 34-40 | test / test:coverage / test:snapshot 分工有何不同？ |
+
+## 源码深潜
+
+<CodeWalk file="packages/acp/acp/src/index.ts" lines="151-168" symbol="apply（session/event 监听器）" title="精读 1：自动化线路只运「已提交的文本」">
+
+<div slot="code">
+
+```ts
+
+  // Emit only committed assistant text. Raw chunks, reasoning, tools, plans,
+  // titles, and retry markers are presentation or trace data and stay off the
+  // automation wire.
+  ctx.on('session/event', (session, event: SessionEvent) => {
+    const record = sessions.get(session.header.id)
+    if (record === undefined || record.agent.session !== session) return
+    try {
+      if (event.type === 'assistant/message') {
+        for (const block of event.data.message.content) {
+          if (block.type === 'text' && block.text.length > 0) {
+            notify({
+              sessionId: record.agent.session.id,
+              update: {
+                sessionUpdate: 'agent_message_chunk',
+                content: { type: 'text', text: block.text },
+              },
+            })
+```
+
+</div>
+
+ACP（Agent Client Protocol）是给 IDE 和自动化平台用的协议：外部客户端通过 stdio 上的 ndjson 跟 dsh 说话。这个 `session/event` 监听器回答了一个关键设计问题——**什么才配登上自动化线路**：
+
+- 只有 `assistant/message` 事件里的文本块变成 `session/update` 通知推给客户端。raw chunk、reasoning、工具调用、plan、标题，全是「演示或追踪数据」，留在 harness 自己的 UI 层。
+- 注意它听的是**已提交的会话日志事件**，不是流式 chunk——这就是第 4 章「日志是唯一真相」的兑现：协议层不重放内存，只转播落盘事实。
+- `prompt` 的结算更有意思（297-335 行）：先把 inflight 槽位架好再 `followup()`，然后等 `agent.whenIdle()`——turn 结束的原因记录在 `turn/end` 里，普通收尾报 `end_turn`，模型错误则立刻 reject。
+- 防御细节：`ownedRecord` 校验 record 里的 agent 就是本尊，防止同 id 冒名；prompt 前还要对照活注册表再验一次（289-295 行），因为 agent-loop 热重载会把旧 agent 销毁而 record 还活着——**退役机器会默默收下消息**，必须 fail loud。
+
+</CodeWalk>
+
+<CodeWalk file="packages/acp/acp/src/index.ts" lines="211-229" symbol="approval/request 监听器" title="精读 2：审批闸门翻译成协议问题——一次性授权">
+
+<div slot="code">
+
+```ts
+
+  // Permission requests are a machine policy channel for ACP clients such as
+  // dsh-subagent-acp. The bridge offers one-shot choices only and never infers a
+  // durable grant from an unknown client response.
+  ctx.on('approval/request', (request, next) => {
+    const record = ownedRecord(request.agent)
+    if (record === undefined || request.callId === undefined) return next()
+    return conn.requestPermission({
+      sessionId: record.agent.session.id,
+      toolCall: { toolCallId: request.callId },
+      options: [
+        { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+        { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' },
+      ],
+    }).then(({ outcome }) => {
+      if (outcome.outcome === 'cancelled') return 'cancelled'
+      return outcome.optionId === 'allow-once' ? 'allowed-once' : 'rejected'
+    })
+  })
+```
+
+</div>
+
+第 6 章的 `tools/pre-execute` 审批闸门，在 ACP 线上被翻译成协议的 `session/request_permission` 往返。三个设计决定值得记住：
+
+- **它挂在 `approval/request` waterfall 上**：不属于本桥的会话（`ownedRecord` 为空）或没有 `callId` 的请求，直接 `next()` 交回链条——waterfall 铁律，不接管就必须委托。
+- **只给一次性选项**：`allow_once` / `reject_once`，协议层面根本没有「以后都允许」。注释说得明白：绝不从陌生客户端的回答里推断出持久授权——fail-closed 到了协议边界依然成立。
+- 桥本身只翻译不决策：客户端选什么，waterfall 就返回什么。
+
+</CodeWalk>
+
+<CodeWalk file="packages/sdk/protocol/src/types.ts" lines="91-105" symbol="HarnessSdkNotificationMap / HarnessSdkRequestMap" title="精读 3：SDK 的方法族——三请求四通知">
+
+<div slot="code">
+
+```ts
+
+/** Server-to-client notifications by JSON-RPC method name. */
+export interface HarnessSdkNotificationMap {
+  'session.event': SessionEventNotification
+  'session.status': SessionStatusNotification
+  'subagent.started': SubagentStartedNotification
+  'subagent.finished': SubagentFinishedNotification
+}
+
+/** Client-to-server request methods with their param and result shapes. */
+export interface HarnessSdkRequestMap {
+  'initialize': { params: InitializeParams; result: InitializeResult }
+  'session/prompt': { params: SessionPromptParams; result: SessionPromptResult }
+  'shutdown': { params: undefined; result: Record<string, never> }
+}
+```
+
+</div>
+
+如果说 ACP 是「讲给陌生 IDE 听的标准普通话」，SDK 就是「自家脚本用的全量遥控器」——这是它和 ACP 的定位差异。方法族小得惊人，却什么都能做：
+
+- `initialize` 握手时定下 cwd、provider、model，服务端顺便在缺适配器时挂载 DeepSeek 兜底（server.ts 111-125 行）。
+- `session/prompt` 入队一条 prompt，返回 durable 的 `messageId`——注意它**不等待结果**，结果从通知流里看。未知的 sessionId 还会惰性创建 agent + session 对（server.ts 203-235 行）。
+- 四个通知覆盖一切可观察面：`session.event` 把**完整日志信封**逐条推出（不止文本，比 ACP 全量得多）、`session.status` 报 idle/running、`subagent.started/finished` 报分身术动态。
+- `shutdown` 处置服务端持有的 agent、适配器与订阅直到静默（server.ts 150-181 行）。
+
+类型即协议文档：这张地图同时被服务端插件和各语言客户端共享，`serverInfo.name` 恒定 `deepseek-harness-sdk-runtime`。
+
+</CodeWalk>
+
+<CodeWalk file="packages/sdk/protocol/src/transport.ts" lines="200-224" symbol="JsonRpcLineTransport.handleLine" title="精读 4：两根水管同一根——行协议的分帧规则">
+
+<div slot="code">
+
+```ts
+
+  private async handleLine(line: string): Promise<void> {
+    let message: unknown
+    try {
+      message = JSON.parse(line)
+    } catch {
+      // Only JSON syntax errors reach this catch; malformed peer lines are ignored.
+      return
+    }
+    if (!message || typeof message !== 'object') return
+    const frame = message as Record<string, unknown>
+    const id = frame.id
+    const method = frame.method
+    if ((typeof id === 'string' || typeof id === 'number') && typeof method === 'string') {
+      await this.handleIncomingRequest(id, method, objectParams(frame.params))
+      return
+    }
+    if (typeof id === 'string' || typeof id === 'number') {
+      this.handleIncomingResponse(id, frame)
+      return
+    }
+    if (typeof method === 'string') {
+      this.notificationHandler?.(method, objectParams(frame.params))
+    }
+  }
+```
+
+</div>
+
+ACP 走 `@agentclientprotocol/sdk` 的 `ndJsonStream`，SDK 走自己的 `JsonRpcLineTransport`——**两条线共用同一种「每行一条 JSON」的行协议心智模型**。这个 20 行的分诊台是全部规则：
+
+- `id` + `method` = 请求 → 交给 handler，结果回写同 id 的响应帧。
+- 只有 `id` = 响应 → 按 id 找 pending 里的等待者结算（240-254 行）。
+- 只有 `method` = 通知 → 火后不管。
+- 解析失败的行**直接丢弃**——行协议的宽容是刻意的：std io 上混入一行调试输出不至于炸掉整个会话。
+- 错误码沿用 JSON-RPC 2.0 经典：方法不存在 `-32601`，handler 抛错 `-32603`（226-238 行）。
+
+SDK 客户端的高级封装（`DeepSeekHarness` / `HarnessSession`，api.ts 22-246 行）就站在这根水管上：`HarnessSession.run` 发完 prompt 后订阅通知流，从 `agent/inbox/spliced` 回执确认入队，一路收到 `session.status: idle` 才结算返回——低级帧细节完全藏住。
+
+</CodeWalk>
+
+<CodeWalk file="scripts/run-gates.ts" lines="496-518" symbol="coverageGates" title="精读 5：质检流水线——为什么 CI 的门是 test:coverage 而不是 test">
+
+<div slot="code">
+
+```ts
+
+function coverageGates(): Gate[] {
+  const workers = coverageWorkerArgs()
+  return [
+    pnpmExec('coverage', [
+      'vitest',
+      'run',
+      '--coverage',
+      ...workers.instrumented,
+    ], {
+      label: 'test:coverage',
+      env: { [COVERAGE_EXEMPT_ENV]: '1' },
+    }),
+    pnpmExec('coverage-exempt-heavy', [
+      'vitest',
+      'run',
+      ...coverageExemptHeavySuites.map(suite => suite.filter),
+      ...workers.exempt,
+    ], {
+      label: 'test:coverage-exempt-heavy',
+    }),
+  ]
+}
+```
+
+</div>
+
+`run-gates.ts` 是仓库的「质检流水线调度器」：每个 gate 是一条 pnpm 命令，`needs` 连成依赖图，`validateGateGraph` 先拒绝重复 id、未知依赖和环（649-667 行），然后按并发预算调度（本地 `doc-sync`/`check-all` 封顶 4 worker，因为多个文档门各建一个完整 ts.Program，不设限会把内存挤爆）。
+
+两道最有个性的门：
+
+- **覆盖门**：`pnpm run test` 只是把测试跑绿；CI 的门是 `test:coverage`——v8 插桩、`packages/*/*/src` 每文件 100% 的硬指标。重型套件（编译器型、子进程型 fixture）插桩后要慢好几倍，于是拆成不插桩的 `coverage-exempt-heavy` 并跑，两个 gate 还得瓜分 `DSH_COVERAGE_MAX_WORKERS` 的线程预算。
+- **快照门**：`test:snapshot` 是 keyless 回放——把真实 API 回答录成 fixture，之后不要 key 就能让 ACP/headless 示例真实跑一遍并比对输出。紧随其后的 `snapshotGate`（523-528 行）固定 `DSH_EXAMPLE_MODE=lib` 且 `needs: ['build']`：回放的是**构建产物**在 plain Node 下的真实行为，不是源码态幻觉。
+- 第三道 `doc-sync`（581-615 行）一口气挂二十多个 verify-* 叶子：mermaid 图校验、导出 JSDoc、双语配对、字数预算……文档和代码不同步，门就红。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="一次 ACP 会话的完整时序" caption="prompt 不阻塞等模型；文本经 session/update 流出；审批是一次性问答">
+  sequenceDiagram
+    participant C as ACP 客户端（IDE）
+    participant B as dsh-acp 桥
+    participant L as Agent Loop
+    participant U as 用户
+    C->>B: initialize
+    B-->>C: protocolVersion + agentInfo
+    C->>B: session/new（cwd 绝对路径）
+    B->>L: agents.create 创建 agent
+    B-->>C: sessionId
+    C->>B: session/prompt（文本）
+    B->>L: followup 入队（先架 inflight 槽）
+    loop 每个已提交的 assistant/message
+      L-->>B: session/event 落盘
+      B-->>C: session/update（agent_message_chunk）
+    end
+    opt 工具调用需要审批
+      B->>C: session/request_permission
+      C->>U: Allow once / Reject
+      U-->>C: 一次性选择
+      C-->>B: outcome → waterfall 决策
+    end
+    L-->>B: turn/end + agent idle
+    B-->>C: prompt 返回 stopReason: end_turn
+</MermaidDiagram>
+
+<MermaidDiagram title="从一次 push 到生产线" caption="CI 拥有全量矩阵；本地只跑与改动面匹配的门">
+  flowchart LR
+    SRC["源码改动"] --> STATIC["静态门<br/>typecheck / lint / duplication"]
+    STATIC --> COV["覆盖门<br/>test:coverage（per-file 100%）"]
+    STATIC --> SNAP["快照门<br/>test:snapshot（keyless 回放）"]
+    STATIC --> DOC["doc-sync<br/>二十多个文档门"]
+    COV --> BUILD["build<br/>tsc + tsdown"]
+    SNAP --> BUILD
+    DOC --> BUILD
+    BUILD --> HYG["hygiene<br/>knip / publint / constraints"]
+    HYG --> SMOKE["built-bin smoke<br/>lib 产物真跑"]
+</MermaidDiagram>
+
+## 动手实验
+
+在仓库根目录验证本章结论（需要 `DEEPSEEK_API_KEY` 的实验已标注）：
+
+1. **keyless 回放整条 ACP 流水线**：`pnpm run test:snapshot`——不需要 key，真实子进程 + 录制的模型回答。只看 ACP 一幕：`pnpm run test:snapshot -t "packed ACP"`；看 SDK 一幕：`pnpm run test:snapshot -t "jsonrpc"`。
+2. **亲手当一次 ACP 客户端**（需要 key）：`pnpm run demo:acp` 启动 stdio 服务，用任意 ACP 客户端（或手写 ndjson）发 `initialize` → `session/new` → `session/prompt`，观察 `session/update` 里只有已提交文本，没有 reasoning 和工具细节。
+3. **对比两道测试门**：`pnpm run test` 与 `pnpm run test:coverage`——后者才是 CI 门，观察它对 `packages/*/*/src` 的 per-file 100% 要求。
+4. **看文档门依次过关**：`pnpm run doc-sync`，数一数 PASS 行里有多少个 verify-*；随便改坏一个 README 里的失效链接再跑，观察哪扇门红。
+
+## 胖虎翻车现场
+
+> 胖虎：「我本地 `pnpm run test` 全绿就 push 了，CI 凭什么红？！」
+
+两个原因，都写在本章里。其一：CI 的覆盖门是 `test:coverage` 不是 `test`——胖虎新加的 `src` 文件只被测试「路过」了几行，离 per-file 100% 差得远，`vitest run` 当然不会告诉他。仓库的铁律是**按改动面选证据**：改了行为跑聚焦测试，改了模型可见输出补快照，而不是拿「本地绿」当放行条。
+
+其二更丢人：胖虎写的 ACP 客户端把 `session/update` 当完整输出，上线后发现推理过程、工具卡片全「丢了」，差点报 P0。其实桥从一开始就声明只运已提交的 assistant 文本——他没读 `acp/src/index.ts` 第 152 行的注释，就像第 8 章没读改装说明书一样。**协议读注释，测试读门名**，胖虎交两份学费。
+
+## 全系列总结
+
+<MermaidDiagram title="九章知识地图" caption="从 Cordis 内核到生产线：每一章都是下一章的地基">
+  flowchart TB
+    subgraph KERNEL["内核层"]
+      C01["01 插件宇宙观<br/>Context / Fiber / effect"]
+      C02["02 装载与卸载<br/>Loader 与插件树"]
+    end
+    subgraph SEAM["能力层"]
+      C03["03 接口学<br/>Definition / Provider / Consumer"]
+      C07["07 分身术<br/>subagent seam"]
+      C08["08 自改装与瘦身<br/>tool-cordis / compaction"]
+    end
+    subgraph SPINE["产品脊柱"]
+      C04["04 记忆真相<br/>Session 日志与 surface"]
+      C05["05 循环内部<br/>ReactLoopAgent"]
+    end
+    subgraph EDGE["边界与生产线"]
+      C06["06 分层与审批<br/>四层 patch / fail-closed"]
+      C09["09 走向生产<br/>ACP / SDK / gates"]
+    end
+    C01 --> C02 --> C03
+    C04 --> C05
+    C02 --> C04
+    C03 --> C07 --> C08
+    C05 --> C06 --> C09
+    C08 --> C09
+</MermaidDiagram>
+
+九张底牌，按花色收好：
+
+- **一切皆插件**（01-02）：Context 是 Proxy 门面，注册即副作用、卸载即逆序撤销；Loader 把 YAML 养成插件树。
+- **能力皆 seam**（03、07）：Definition / Provider / Consumer 三角缺一不可，shell、subagent 都是同一件装备的穿法。
+- **记忆皆日志**（04-05、08）：Session 日志是唯一真相，surface 是模型可见投影，loop 编排 turn/step，compaction 用 durable 锁给 surface 做 replace。
+- **边界皆闸门**（06、09）：四层 patch 装配出每个 profile，`tools/pre-execute` fail-closed 审批；对外则 ACP 管自动化、SDK 管全量遥控，共用行协议心智。
+- **质量皆门禁**（09）：keyless 快照回放钉住模型可见行为，`test:coverage` 的 100% 门守住每一行 src，doc-sync 让文档与代码同步腐烂率为零。
+
+读到这里，你已经从「宇宙大爆炸」一路走到生产线质检台。下次再打开 dsh 的任何一个包，记得大雄的结业心得：先找 Fiber，再找 seam，最后看日志——源码里没有魔法，只有没读到的行号。
+
+</Chapter>

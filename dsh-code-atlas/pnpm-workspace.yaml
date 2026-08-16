@@ -1,0 +1,3 @@
+# 独立 workspace 根：阻止 pnpm 向上并入 deepseek-harness monorepo。
+# 本站与主仓库只共享文件系统，不共享依赖图。
+packages: []

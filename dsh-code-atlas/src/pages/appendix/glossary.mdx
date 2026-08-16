@@ -1,0 +1,92 @@
+---
+---
+import Base from '../../layouts/Base.astro';
+import AppendixNav from '../../components/AppendixNav.astro';
+
+<Base title="附录 · 术语表">
+  <AppendixNav current="glossary" />
+
+  <div class="prose-atlas">
+    <h1 class="section-title text-2xl font-extrabold">附录 · 术语表</h1>
+
+    <p>全站术语的权威定义。每条 1–2 句，括号内标注深入讲解的章节。</p>
+
+    <h2>Cordis 内核</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | 插件（plugin） | dsh 的唯一组织单位：函数、`{ apply }` 对象或 class，经 `ctx.plugin()` 挂载获得 Fiber（见第 1 章）。 |
+    | Fiber | 一个插件挂载点的生命周期载体：管状态机（INACTIVE → ACTIVE → DISPOSED）、持有 config 与 disposer 栈（见第 1 章）。 |
+    | effect / dispose | `ctx.effect(execute)` 立即执行并把返回的清理函数入栈；卸载时严格逆序调用。「注册即副作用」（见第 1 章）。 |
+    | Context | 插件拿到的上下文对象，构造时返回 Proxy；`extend`/`isolate` 只创建子作用域，不改父对象（见第 1 章）。 |
+    | Proxy 门面 | Context 的真身：`ctx.xxx` 的属性读写经 ReflectService 动态解析到具体服务（见第 1 章）。 |
+    | mixin | ReflectService 把 fiber/registry/events 的方法（`effect`/`on`/`plugin`/`waterfall`…）混入 `ctx` 的机制（见第 1 章）。 |
+    | waterfall | 洋葱式链式派发：最后一个实参是内建行为 `next`；监听器不调 `next()` 即否决整条链（见第 1 章）。 |
+    | serial / bail / emit / parallel | 其余四种派发模式：serial 顺序 await 直到有人 bail；bail 是其同步版；emit 火后不管；parallel 并发 await（见第 1 章）。 |
+
+    <h2>Loader 与装配</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | Entry | cordis.yml 里的一行插件配置；`init` → `_start` → `registry.plugin` 完成挂载（见第 2 章）。 |
+    | EntryGroup | Entry 的容器节点，管理子行的增删与顺序（见第 2 章）。 |
+    | Include | 把一个 YAML 文件（含 patch 列表）挂载为一棵子树的 Loader 插件（见第 2 章）。 |
+    | patch | 对插件树的覆盖层：按 id 覆盖字段或按 `insert` 插入行；整字段覆盖，非 deep merge（见第 6 章）。 |
+    | profile | `$DSH_HOME/profiles` 下一个命名的可启动配置，根 `cordis.yml` 恒为空数组，真树由 patch 叠出（见第 6 章）。 |
+    | bundle | 可安装的 patch 层包（如 `dsh-base`），是 profile 的第一层叠加（见第 6 章）。 |
+    | preset | 会话级 agent 组合：在 agent 作用域再挂一个 Include，使工具/prompt 归入该会话层（见第 6 章）。 |
+    | isolate realm | Context 的隔离标签：同名服务在不同 realm 互不可见，用于隔离子树的依赖视图（见第 2 章）。 |
+
+    <h2>能力 seam</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | capability seam | 一项能力的完整接缝 = Service Definition + Provider + Consumer 三角，缺一不是 seam（见第 3 章）。 |
+    | Service Definition | 抽象类 + `declare module` 扩 Context 类型；Provider 继承后 default 导出即注册（见第 3 章）。 |
+    | Provider | seam 的实现方（如 bash-local），只依赖 Definition，不被 Consumer 依赖（见第 3 章）。 |
+    | Consumer | seam 的使用方（如 tool-bash），声明 `inject` 后经 `ctx.shell` 调用（见第 3 章）。 |
+    | request / spec | 显式默认化约定：`resolve(request): Spec` 填齐默认值，`run()` 只吃 Spec，内部不再有隐藏默认值（见第 3 章）。 |
+
+    <h2>Session 与日志</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | SessionEvent | append-only 日志里的一条记录：type + data + seq + time 信封（见第 4 章）。 |
+    | append-only | 日志只增不改；所有「修改」都是新事件（replace 也是新节点遮蔽旧区间）（见第 4 章）。 |
+    | surface | 日志的模型可见投影：仅 `user/message`、`assistant/message`、`tool/result` 三类进入，支持 append 与 replace 两种 op（见第 4 章）。 |
+    | model-visible ⟺ logged | 铁律：发给模型的请求必须能从同一份日志折叠重建；`llm/stream` 上的 invariant 负责断言（见第 4 章）。 |
+    | SESSION_FORMAT_VERSION | 日志格式版本，预发布固定 `0`：异版拒载、无迁移；仅结构性变更才 bump（见第 4 章）。 |
+
+    <h2>Agent loop 与工具</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | turn | 一轮：从 claim 队列输入到 `turn/end`，可含零到多个 step（见第 5 章）。 |
+    | step | 一步：一次模型调用 + 它请求的全部工具执行（见第 5 章）。 |
+    | inbox | agent 的双队列输入盒：`next-turn`（每人一轮）与 `next-step`（同轮 steer/inject）（见第 5 章）。 |
+    | tools/pre-execute | 工具执行前的 waterfall 闸门：审批、hooks、策略在此放行或否决（见第 6 章）。 |
+    | fail-closed | 审批语义：链路异常或无决策时默认拒绝，而非放行（见第 6 章）。 |
+    | PreToolDecision | `tools/pre-execute` 的返回值：`allow` / `deny` / `ask` 三态（见第 6 章）。 |
+
+    <h2>Subagent 与 compaction</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | subagent | 主 agent 派生的子代理：独立会话、受 maxDepth 约束（见第 7 章）。 |
+    | maxDepth | 递归预算铁律：子代理深度持久化在会话 header，超限即拒绝派生（见第 7 章）。 |
+    | spawn / fork / acp provider | subagent 的三种 Provider：进程内派生 / 种子派生 / 经 ACP 协议派生（见第 7 章）。 |
+    | compaction | 会话瘦身：把一段 surface 换成摘要消息，释放上下文窗口（见第 8 章）。 |
+    | prune | 压缩前的可选裁剪：先删掉可再生的工具结果再评估是否需要摘要（见第 8 章）。 |
+    | checkpoint | 每请求一次的耐久检查点，由 checkpoint policy 插件负责（turn 边界不 await flush）（见第 4 章）。 |
+
+    <h2>协议与工程</h2>
+
+    | 术语 | 定义 |
+    |---|---|
+    | ACP | Agent Client Protocol：自动化客户端（编辑器、CI）驱动 agent 的协议（见第 9 章）。 |
+    | JSON-RPC | SDK 服务端的传输协议：`HarnessSdkJsonRpcServer` 对外暴露 harness 能力（见第 9 章）。 |
+    | SDK | `packages/sdk`：JSON-RPC 协议 + 服务端 + TypeScript 客户端三件套（见第 9 章）。 |
+    | 快照测试 | 无密钥的 ACP/headless 回放：模型与用户输出对齐到仓库里的期望文本（见第 9 章）。 |
+    | doc-sync | 文档门禁集合：符号、目录、行号与代码的同步校验（见第 9 章）。 |
+  </div>
+</Base>

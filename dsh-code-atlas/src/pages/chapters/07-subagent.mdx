@@ -1,0 +1,288 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="07"
+  title="分身术"
+  subtitle="subagent 对模型来说只是一个普通工具——真正的好戏在 ctx.subagents 注册表后面：maxDepth 铁律，以及 spawn / fork / acp 三个平行执行世界"
+  prev={{ slug: '06-layers-approval', title: '06 分层与审批' }}
+  next={{ slug: '08-self-mod-compaction', title: '08 自改装与瘦身' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦，文档说 agent 可以「派出子 agent」……这不就是影分身之术吗？分身会不会也结印继续分身，最后一万个我在房间里开 party？' },
+  { who: 'doraemon', text: '想到点子上了。所以这条链上有个铁律叫 maxDepth——默认 3 层，第 4 层想出生直接被拒绝。分身术的第一课不是怎么分，是怎么刹车。' },
+  { who: 'nobita', text: '那分身知道我刚才跟他爸聊了什么吗？' },
+  { who: 'doraemon', text: '看你选哪个世界：spawn 是新生儿，什么都不知道；fork 带着父亲的记忆出生；acp 干脆送去另一个星球。今天三个世界各逛一遍！' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="subagent 能力接缝三角色" caption="Consumer 把分身术包装成模型工具；Service Definition 管注册与校验；Provider 决定孩子在哪个世界出生">
+  flowchart TB
+    subgraph CONSUMER["Consumer：tool-subagent"]
+      TOOL["模型工具 subagent<br/>description + prompt 进，result 出"]
+    end
+    subgraph DEF["Service Definition：dsh-subagent"]
+      RT["SubagentRuntime<br/>registerProvider / start / 能力校验"]
+      DEPTH["depth.ts + child-agent.ts<br/>maxDepth 铁律 / 子代组合"]
+    end
+    subgraph PROV["三个 Provider 世界"]
+      SPAWN["subagent-spawn-in-process<br/>全新子 Agent，零父上下文"]
+      FORK["subagent-fork-in-process<br/>带父日志前缀出生"]
+      ACP["subagent-acp<br/>进程外 ACP 子 agent"]
+    end
+    TOOL -->|"ctx.subagents.start(name, request)"| RT
+    RT --> DEPTH
+    RT --> SPAWN
+    RT --> FORK
+    RT --> ACP
+</MermaidDiagram>
+
+| 文件 | 关键行 | 本章要回答的问题 |
+|---|---|---|
+| `packages/subagent/subagent/src/index.ts` | 369-426 | `ctx.subagents` 注册表怎么收 provider、怎么发任务？ |
+| `packages/subagent/subagent/src/types.ts` | 86-149 | 一次分身请求能携带哪些能力声明？ |
+| `packages/subagent/subagent/src/depth.ts` | 28-51 | 深度从哪读？非法 maxDepth 谁拦？ |
+| `packages/subagent/subagent/src/child-agent.ts` | 48-57、163-175 | 子 agent 的深度怎么算？组合与隔离怎么做？ |
+| `packages/subagent/tool-subagent/src/index.ts` | 81-99、267-467 | 模型看到的 `subagent` 工具是怎么注册的？ |
+| `packages/subagent/subagent-spawn-in-process/src/index.ts` | 19-64 | 「新生儿」世界有多简单？ |
+| `packages/subagent/subagent-fork-in-process/src/index.ts` | 48-75 | 父日志前缀怎么切？ |
+| `packages/subagent/subagent-acp/src/index.ts` | 66-189 | 进程外世界为什么「零能力」？ |
+
+## 源码深潜
+
+<CodeWalk file="packages/subagent/tool-subagent/src/index.ts" lines="281-296" symbol="apply.mount" title="精读 1：subagent 只是工具——Consumer 的 mount 检查">
+
+<div slot="code">
+
+```ts
+  const mount = (provider: SubagentProvider): void => {
+    // A numeric cap the provider cannot enforce is a misconfiguration — fail at
+    // mount (the earliest point the provider's capabilities are known), not on
+    // the first delegation.
+    if (typeof config.maxDepth === 'number' && !provider.capabilities.depthLimit) {
+      throw new Error(
+        `tool-subagent: provider "${provider.name}" cannot enforce maxDepth (no depthLimit capability) — `
+        + 'set maxDepth: \'provider-managed\' to leave the recursion budget to the provider',
+      )
+    }
+    const wording = providerWording(provider.inheritsParentContext)
+    if (continuable && provider.prepareContinuable === undefined) {
+      throw new Error(
+        `tool-subagent: provider "${provider.name}" does not support \`backgroundMode: continuable\``,
+      )
+    }
+```
+
+</div>
+
+先破除最大的误解：**subagent 对模型而言没有任何特权，它就是一个普通工具**。`tool-subagent` 是这个能力接缝的 Consumer——它向 `ctx.tools` 注册一个叫 `subagent` 的工具，参数只有 `description` 和 `prompt`，模型根本感知不到后面有三个世界。
+
+这段 mount 检查展示了两条仓库级规约的实战：
+
+- **Misconfiguration fails loud**：你配了数字 `maxDepth`（默认 3，见 98 行的 schema 默认值），但所选 provider 没有 `depthLimit` 能力（比如 acp），**挂载时直接抛错**，绝不等到第一次委派才炸。错误消息连修复方案都给了：改用 `maxDepth: 'provider-managed'`，把递归预算交给远端运行时。
+- **工具描述随 provider 而变**：`providerWording(provider.inheritsParentContext)`——fork 世界的工具描述会告诉模型「孩子能看到我们的对话」，spawn 世界则会提醒「孩子一无所知，prompt 里要写全上下文」。模型可见的措辞是 provider 事实的函数，不是写死的文案。
+
+</CodeWalk>
+
+<CodeWalk file="packages/subagent/subagent/src/index.ts" lines="414-426" symbol="SubagentRuntime.start" title="精读 2：start——服务定义层的「海关」">
+
+<div slot="code">
+
+```ts
+  async start(name: string, request: SubagentStartRequest): Promise<SubagentRun> {
+    const provider = this.expectProvider(name)
+    this.assertCapabilities(provider, request)
+    assertSubagentMaxDepth(request.maxDepth)
+    if (request.outputSchema !== undefined) assertObjectJsonSchema(request.outputSchema)
+    const descriptor = snapshotSubagentDescriptor({
+      mode: 'one-shot',
+      provider: name,
+      ...request.label !== undefined ? { label: request.label } : {},
+    })
+    const resolved: ResolvedSubagentStartRequest = { ...request, descriptor }
+    return observeRun(this.emitLifecycle, name, request.parent, await provider.start(resolved))
+  }
+```
+
+</div>
+
+`SubagentRuntime` 是 Service Definition 的化身，`start` 是它的海关——每个分身请求出境前连过四关：
+
+1. **找 provider**：`expectProvider` 查注册表，没有就 `NO_PROVIDER` 抛错（449-455 行）。provider 的注册走 `registerProvider`（369-385 行）——注意它是标准 `ctx.effect` 注册，返回 disposer，重名抛 `DUPLICATE_PROVIDER`，完全遵守第 1 章的「注册即副作用」。
+2. **能力对账**：`assertCapabilities`（481-496 行）逐项核对——请求带 `outputSchema` 而 provider 没声明这个能力？`UNSUPPORTED_CAPABILITY`。请求什么就查什么，没请求的能力不打扰。
+3. **深度合法性**：`assertSubagentMaxDepth` 拒绝非整数、负数、甚至 `-0`（depth.ts 42-51 行——连负零都防，强迫症福音）。
+4. **生成持久身份**：`snapshotSubagentDescriptor` 冻结 `{ mode, provider, label }` 快照，随子会话持久化——孩子「是哪个世界来的、叫什么」是耐久事实，冷恢复时靠它重建。
+
+`SubagentStartRequest`（types.ts 100-149 行）本身也值得一看：`parent` 是必填的派遣者，`signal` 是唯一的取消通道，`maxDepth` / `toolFilter` / `persona` / `outputSchema` 四个可选项一一对应 `SubagentCapabilities` 的四个布尔位。
+
+</CodeWalk>
+
+<CodeWalk file="packages/subagent/subagent/src/child-agent.ts" lines="48-57" symbol="resolveChildDepth" title="精读 3：maxDepth 铁律——分身链的刹车片">
+
+<div slot="code">
+
+```ts
+export function resolveChildDepth(parent: Agent, maxDepth: number | undefined): number {
+  const childDepth = delegationDepthOf(parent) + 1
+  if (!Number.isSafeInteger(childDepth)) {
+    throw new RangeError('subagent child depth exceeds the safe-integer range')
+  }
+  if (maxDepth !== undefined && childDepth > maxDepth) {
+    throw new SubagentDepthError(childDepth, maxDepth)
+  }
+  return childDepth
+}
+```
+
+</div>
+
+10 行代码挡住无限递归。但真正的机关在上游的 `delegationDepthOf`（depth.ts 28-36 行）：
+
+```text
+Math.max(agent.session.header.delegationDepth ?? 0, runtime ?? 0)
+```
+
+**深度取「持久化头部」与「运行时选项」的较大者**。为什么取 max 而不是只看运行时？因为子 agent 可能被冷恢复——恢复出来的孩子带着崭新的 options，如果从零计数，它就能假装自己是顶层 agent 继续无限分身。持久化头部是单调地板：**记忆可以重启，辈分不能**。
+
+工具层 `maxDepth: 0` 的语义也因此清晰：任何孩子深度至少是 1，一定大于 0，于是 `0` 等于「禁止一切委派」。而 `'provider-managed'`（tool-subagent Config 78 行）则明确表示：这个 cap 不归本地管，交给进程外世界的运行时自己约束。
+
+</CodeWalk>
+
+<CodeWalk file="packages/subagent/subagent/src/child-agent.ts" lines="163-175" symbol="applyChildComposition" title="精读 4：子 agent 的组合与隔离——一次调用装完三件套">
+
+<div slot="code">
+
+```ts
+export function applyChildComposition(
+  childCtx: Context,
+  parent: Agent,
+  composition: ChildComposition,
+): void {
+  childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
+  // Order 120: after the sandbox:policy (110) and approval:policy (115) sentences.
+  childCtx.systemPrompt.context({ name: 'subagent:delegation', order: 120, text: SUBAGENT_DELEGATION_CONTEXT })
+  if (composition.persona !== undefined) {
+    childCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: composition.persona })
+  }
+  if (composition.toolFilter !== undefined) childCtx.tools.restrict(composition.toolFilter)
+}
+```
+
+</div>
+
+孩子的「出生装备」全在这一个函数里，顺序就是语义：
+
+1. **先 join 父的 preset**：`composeFrom` 让孩子继承父 agent 的会话级组合（工具、prompt 段）。注释解释了这个函数为什么把 join 和后续注册收在**一次调用**里：不 join preset 的孩子看到的是空的工具注册表——「忘了继承」这个缺陷类型，靠函数签名让它在调用点无法表达。
+2. **再钉死委派声明**：`subagent:delegation` 这段 runtime context 告诉孩子「你的权限范围在启动时已固定，无法从内部扩大」。这就是隔离的模型可见面——孩子**知道自己**是分身。
+3. **最后压上孩子专属的影子**：`persona` 以同名 section 遮蔽部署级人设（只对这个孩子生效）；`toolFilter` 走作用域 `tools.restrict()`——被过滤的工具从孩子的提示词里消失**且**拒绝执行，父与兄弟完全无感。
+
+还有一条隐藏铁律在 `captureDelegatedPolicyOverrides`（199-204 行）：只要部署里挂了审批服务，孩子的 `approval/policy` 被钉为 `'never'`。结合第 6 章——**子 agent 的危险操作不问人，直接拒**。分身可以干活，但不能替你挨审批的骂。
+
+</CodeWalk>
+
+<CodeWalk file="packages/subagent/subagent-fork-in-process/src/index.ts" lines="48-54" symbol="completedTurnPrefix" title="精读 5：fork 世界——记忆从哪一刀切">
+
+<div slot="code">
+
+```ts
+function completedTurnPrefix(parent: Agent): SessionEvent[] {
+  const events = parent.session.events
+  const lastEnd = events.findLast(e => e.type === 'turn/end')
+  if (lastEnd === undefined) return []
+  // seq === array index (the append contract), so slice up to and including it.
+  return events.slice(0, lastEnd.seq + 1)
+}
+```
+
+</div>
+
+fork 的全部魔法就这 7 行：**切下父日志中「到最后一个 turn/end 为止」的前缀，作为孩子的出生记忆**。
+
+- 为什么切在 `turn/end`？因为 fork 总是发生在某个 turn 中途（父正在跑工具、刚决定要分身），进行中的 turn 是**不平衡**的——工具调用已发出、结果还没回。这样的日志无法作为合法子会话重放，果断舍去。
+- `seq === array index` 是会话追加契约给的保证，所以 `slice(0, lastEnd.seq + 1)` 得到的就是从 seq 0 开始的连续合法种子。
+- 一个完成的 turn 都没有？返回空，孩子退化成 spawn——「没有可继承的记忆」和「不继承记忆」殊途同归。
+
+对照 spawn 世界（subagent-spawn-in-process 48-53 行）：`startInProcessRun(request, {})`，永远不带种子，`inheritsParentContext = false`。两个 provider 共享同一个进程内驱动，**唯一区别就是这一刀切不切**。而 acp 世界连切的机会都没有——记忆无法穿越进程边界。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="三种 Provider 的部署形态对比" caption="同一个 start 调用，三个世界：共享进程、共享进程带记忆、跨进程">
+  flowchart LR
+    subgraph HOST["父 agent 所在进程"]
+      P["父 Agent<br/>session + tools + prompt"]
+      RT2["SubagentRuntime"]
+      P --> RT2
+    end
+    subgraph W1["spawn 世界（同进程）"]
+      C1["子 Agent<br/>全新 session<br/>零父上下文"]
+    end
+    subgraph W2["fork 世界（同进程）"]
+      C2["子 Agent<br/>session = 父日志前缀 + 自己的回合"]
+    end
+    subgraph W3["acp 世界（进程外 / 远端）"]
+      PROC["子进程<br/>独立 Cordis 宇宙<br/>独立模型与工具"]
+    end
+    RT2 -->|"startInProcessRun 无种子"| C1
+    RT2 -->|"startInProcessRun 带 turn 前缀种子"| C2
+    RT2 -->|"ctx.subprocess.spawn + ACP 协议"| PROC
+    C1 -.->|"能力：全四项"| RT2
+    C2 -.->|"能力：全四项"| RT2
+    PROC -.->|"能力：全false，maxDepth 只能 provider-managed"| RT2
+</MermaidDiagram>
+
+<MermaidDiagram title="一次前台委派的时序" caption="工具无特权：execute 里组装 request，海关校验后才轮到 provider">
+  sequenceDiagram
+    participant M as 模型
+    participant T as subagent 工具（Consumer）
+    participant R as SubagentRuntime（海关）
+    participant V as Provider（spawn/fork/acp）
+    participant C as 子 Agent
+    M->>T: subagent(description, prompt)
+    T->>T: 组装 SubagentStartRequest（parent/signal/maxDepth...）
+    T->>R: start(providerName, request)
+    R->>R: 能力对账 + maxDepth 校验 + descriptor 快照
+    R->>V: provider.start(resolved)
+    V->>C: 创建子 Agent（组合三件套 + 策略钉死 never）
+    C-->>V: 跑完回合，产出 SubagentResult
+    V-->>R: run
+    R-->>T: run（含生命周期事件）
+    T-->>M: foreground 结果 / 错误 + 部分输出
+</MermaidDiagram>
+
+## 动手实验
+
+在仓库根目录验证本章结论（需要 `DEEPSEEK_API_KEY` 的实验已标注）：
+
+1. **看注册表里有哪几个世界**：`pnpm dsh --profile headless --dump-config`，搜 `subagent`——能找到 `subagent`（服务定义）、`tool-subagent`（Consumer）和当前 profile 挂载的 provider 行，对照本章三角色。
+2. **触发一次分身**（需 key）：`pnpm dsh --profile headless "派一个子 agent 去统计 packages 下有多少个目录，把数字报回来"`，观察输出中子 agent 的启动与回收。
+3. **验证 maxDepth 铁律**（需 key）：用第 6 章学的 `--patch` 给 `tool-subagent` 的 config 盖上 `maxDepth: 0`，再让它派子 agent——委派会在 `resolveChildDepth` 处抛 `SubagentDepthError`，错误原文出现在工具结果里回喂给模型。
+4. **验证 fork 的切点**（需 key）：先跟 agent 聊两轮（制造两个完整 turn），第三轮中让它 fork 一个子 agent 并问「我们之前聊了什么」。孩子能答出前两轮，但**不知道父亲当前这一轮在想什么**——记忆切在最后一个 `turn/end`。
+
+## 胖虎翻车现场
+
+> 胖虎：「我把 provider 换成 acp，maxDepth 照旧写 3，结果 boot 直接炸了！错误还让我改什么 provider-managed……我要的是限制递归，不是放开啊！」
+
+炸了是对的。acp provider 的 `capabilities` 四位全 `false`（index.ts 147 行）——孩子在另一个进程（甚至另一台机器）里，本地运行时**数不到**它的深度，硬说能限制就是撒谎。两条路：孩子的递归预算由对端运行时自己管（`maxDepth: 'provider-managed'`），或者干脆别用数字 cap。mount 时炸，总好过第 4 层分身时才被发现拦不住。
+
+> 胖虎（again）：「我让 fork 出来的孩子总结一下『我们刚才的对话』，它居然漏掉了最新一段！这 bug 我分分钟修——把 slice 的终点改成日志末尾不就行了？」
+
+万万不可。fork 发生在父 turn 中途，末尾那截日志里有一个**发出了工具调用但还没收到结果**的半成品 turn，拿它当种子等于让孩子的记忆从矛盾中开始——重放即非法。切在最后一个 `turn/end` 不是偷懒，是会话日志的平衡性约束。真想让孩子知道最新进展？把要点写进 `prompt` 里，那是父亲对分身的「临行嘱托」通道。
+
+## 小结卡
+
+- subagent 是**模型可见的普通工具**（Consumer），无特权；`ctx.subagents`（Service Definition）当海关，三个 Provider 各管一个世界。
+- 三世界速查：spawn = 同进程新生儿；fork = 同进程 + 父日志「到最后一个 turn/end」的前缀记忆；acp = 进程外独立宇宙，能力全 `false`，只借父会话的 cwd。
+- **maxDepth 铁律**：孩子深度 = 父深度 + 1；父深度取持久化头部与运行时的较大者（防冷恢复洗白辈分）；默认 3，`0` 禁止委派，`'provider-managed'` 交给远端。
+- 孩子出生三件套一次装齐：join 父 preset → 钉死 `subagent:delegation` 声明 → 压上影子 persona 与 scoped 工具过滤；审批策略恒钉 `'never'`。
+- 配置与能力不匹配在 **mount 时**抛错，不在第一次委派时。
+- 下一章：agent 开始改装自己——self-modification 如何安全地挂载自己的插件，以及 compaction 怎么给上下文「瘦身」。
+
+</Chapter>

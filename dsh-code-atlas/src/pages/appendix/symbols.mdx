@@ -1,0 +1,90 @@
+---
+---
+import Base from '../../layouts/Base.astro';
+import AppendixNav from '../../components/AppendixNav.astro';
+
+<Base title="附录 · 符号索引">
+  <AppendixNav current="symbols" />
+
+  <div class="prose-atlas">
+    <h1 class="section-title text-2xl font-extrabold">附录 · 符号索引</h1>
+
+    <p>全站核心符号的速查表。每个符号都锚定到仓库真实文件的行号——复制「文件:行号」列，在 GitHub 上把行号拼成 <code>#Lxxx</code> 锚点即可直达源码（例如 <code>vendor/cordis/src/fiber.ts#L415</code>）。「所属章」指深入讲解该符号的章节。</p>
+
+    <h2>Cordis 内核（vendor/cordis）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `Context` | `vendor/cordis/src/context.ts:42` | 根/子上下文；构造函数返回 Proxy 门面而非裸实例 | 第 1 章 |
+    | `Fiber.effect` | `vendor/cordis/src/fiber.ts:415` | 注册即副作用：立即执行、卸载时逆序清理 | 第 1 章 |
+    | `RegistryService.plugin` | `vendor/cordis/src/registry.ts:316` | 一个插件的出生证明：runtime 缓存 + 每挂载点一个 Fiber | 第 1 章 |
+    | `EventsService.waterfall` | `vendor/cordis/src/events.ts:234` | 洋葱式链式决策；监听器不调 `next()` 即否决 | 第 1 章 |
+    | `ReflectService`（mixin） | `vendor/cordis/src/reflect.ts:219` | 把 `effect`/`on`/`plugin`/`waterfall` 混入 `ctx` | 第 1 章 |
+
+    <h2>Loader（vendor/loader）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `Loader` | `vendor/loader/src/index.ts:65` | Loader 本体；继承 EntryTree，负责 `internal/config` 插值 | 第 2 章 |
+    | `Entry._start` | `vendor/loader/src/config/entry.ts:291` | 真正启动一行插件：patch context 后调 `registry.plugin` | 第 2 章 |
+    | `EntryTree.create` | `vendor/loader/src/config/tree.ts:97` | 运行时新增插件行（没有 `loader.start()`，换插件是 dispose + create） | 第 2 章 |
+
+    <h2>session（packages/core/session）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `Session.append` | `packages/core/session/src/index.ts:604` | append-only 日志唯一写入口；热路径不阻塞 I/O | 第 4 章 |
+    | `Session.deriveMessages` | `packages/core/session/src/index.ts:726` | 从 surface 增量折叠出模型可见的 messages | 第 4 章 |
+    | `SESSION_FORMAT_VERSION` | `packages/core/session/src/types.ts:56` | 日志格式版本，固定 `0`；结构性变更才 bump | 第 4 章 |
+    | `foldSurface` | `packages/core/session/src/surface.ts:387` | 把整段日志折叠成有序 surface（append / replace） | 第 4 章 |
+
+    <h2>agent-loop（packages/core/agent-loop）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `ReactLoopAgent` | `packages/core/agent-loop/src/agent.ts:64` | ReAct 主循环本体 | 第 5 章 |
+    | `ReactLoopAgent.turn` | `packages/core/agent-loop/src/agent.ts:246` | 一轮：claim inbox → 多 step → `turn/end` | 第 5 章 |
+    | `ReactLoopAgent.step` | `packages/core/agent-loop/src/agent.ts:332` | 一步：一次模型调用 + 它请求的工具执行 | 第 5 章 |
+    | `ReactLoopAgent.preStep` | `packages/core/agent-loop/src/agent.ts:225` | 步前 `agent/pre-step` waterfall：compaction、上下文注入在此挂载 | 第 5 章 |
+
+    <h2>tools 与审批</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `tools/pre-execute` | `packages/core/tools/src/index.ts:1475` | 工具执行前的 waterfall 闸门，默认内建 allow | 第 6 章 |
+    | `tools/execute` | `packages/core/tools/src/index.ts:1573` | 包住工具体的 waterfall：超时等策略插件在此挂载 | 第 6 章 |
+    | `ApprovalService` | `packages/interaction/user-approval/src/index.ts:192` | 审批服务：ask 决策物化为 `approval/asked`/`decided` 事件 | 第 6 章 |
+
+    <h2>subagent（packages/subagent）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `SubagentRuntime` | `packages/subagent/subagent/src/index.ts:171` | 分身 Service Definition：spawn/fork/acp 三种 Provider 的注册面 | 第 7 章 |
+    | `assertSubagentMaxDepth` | `packages/subagent/subagent/src/depth.ts:42` | maxDepth 铁律校验，递归预算超限即拒绝 | 第 7 章 |
+
+    <h2>compaction（packages/compaction）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `CompactionEngine` | `packages/compaction/compaction/src/index.ts:96` | 压缩引擎 Service Definition | 第 8 章 |
+    | `BasicCompactionEngine` | `packages/compaction/compaction-basic/src/index.ts:103` | 基础实现：pressure/overflow 触发、可选 prune、LLM 摘要事务 | 第 8 章 |
+
+    <h2>extensions（packages/extensions/tool-cordis）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `cordis_inspect_list` | `packages/extensions/tool-cordis/src/index.ts:42` | 模型自检：列出运行中的插件 | 第 8 章 |
+    | `cordis_inspect_query` | `packages/extensions/tool-cordis/src/index.ts:61` | 模型自检：查询单个插件详情 | 第 8 章 |
+    | `cordis_define` | `packages/extensions/tool-cordis/src/index.ts:149` | 运行时定义新插件（host/client 双侧代码） | 第 8 章 |
+    | `cordis_run` | `packages/extensions/tool-cordis/src/index.ts:241` | 挂载/运行一个已定义的插件 | 第 8 章 |
+
+    <h2>acp 与 sdk（packages/sdk）</h2>
+
+    | 符号 | 文件:行号 | 一句话职责 | 所属章 |
+    |---|---|---|---|
+    | `HarnessSdkJsonRpcServer` | `packages/sdk/server/src/server.ts:53` | JSON-RPC 服务端：把 harness 能力暴露给外部客户端 | 第 9 章 |
+    | `HarnessClient` | `packages/sdk/client/src/client.ts:184` | TypeScript 客户端：对服务端做类型化调用 | 第 9 章 |
+
+    <blockquote>行号基于撰写时的 main 分支；如与最新代码有偏差，以符号名搜索为准。</blockquote>
+  </div>
+</Base>

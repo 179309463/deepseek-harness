@@ -1,0 +1,48 @@
+---
+interface Panel {
+  who: 'doraemon' | 'nobita' | 'suneo' | 'gian' | 'shizuka' | 'dekisugi' | 'teacher';
+  text: string;
+}
+
+interface Props {
+  panels: Panel[];
+}
+
+const { panels } = Astro.props;
+
+const cast: Record<Panel['who'], { name: string; badge: string; bg: string }> = {
+  doraemon: { name: '哆啦A梦', badge: '哆', bg: 'bg-dora' },
+  nobita: { name: '大雄', badge: '雄', bg: 'on-accent' },
+  suneo: { name: '小夫', badge: '夫', bg: 'bg-green-500' },
+  gian: { name: '胖虎', badge: '胖', bg: 'bg-danger' },
+  shizuka: { name: '静香', badge: '静', bg: 'bg-pink-400' },
+  dekisugi: { name: '出木杉', badge: '杉', bg: 'bg-dora-deep' },
+  teacher: { name: '老师', badge: '师', bg: 'bg-gray-500' },
+};
+---
+
+<div class="story-chat my-8 flex flex-col gap-5">
+  {panels.map((p) => {
+    const c = cast[p.who];
+    const mine = p.who === 'nobita';
+    return (
+      <div class:list={['flex w-full', mine ? 'justify-end' : 'justify-start']}>
+        <div class:list={['flex max-w-[min(40rem,92%)] items-start gap-3', mine && 'flex-row-reverse']}>
+          <div
+            class={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/70 text-base font-extrabold ${c.bg}`}
+            style="color:#fff;-webkit-text-fill-color:#fff"
+            title={c.name}
+          >
+            {c.badge}
+          </div>
+          <div class:list={['min-w-0', mine && 'text-right']}>
+            <div class="mb-1 text-xs font-bold text-ink/45">{c.name}</div>
+            <div class:list={['speech-bubble text-left text-[0.92rem]', mine ? 'bubble-mine' : 'bubble-other']}>
+              {p.text}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  })}
+</div>

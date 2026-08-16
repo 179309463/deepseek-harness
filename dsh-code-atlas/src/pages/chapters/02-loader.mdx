@@ -1,0 +1,325 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="02"
+  title="装载与卸载"
+  subtitle="Loader、Entry/Group、依赖拓扑、isolate realm——一份 YAML 配置如何长成一棵活的插件树"
+  prev={{ slug: '01-plugin-universe', title: '01 插件宇宙观' }}
+  next={{ slug: '03-capability-seam', title: '03 接口学' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦，cordis.yml 明明就是几行 YAML，为什么一启动 dsh，里面每个 id 都变成一个会呼吸的插件？这中间肯定有魔法！' },
+  { who: 'doraemon', text: '没有魔法，只有一条装配流水线：Include 读文件、patch 叠加、Entry 逐个 import，最后全部交给上一章的 registry.plugin。走，去 vendor/loader 里看传送带。' },
+  { who: 'gian', text: '哼，不就是 loader.start() 嘛，我在别的框架里见过！' },
+  { who: 'doraemon', text: '本仓库没有 loader.start() 这个 API，谁写谁炸。真正的启动按钮藏在 Entry 的 _start 里——读完本章你就不会翻这个车了。' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="从 YAML 到 Fiber 的装配流水线" caption="Include 是树的根，Entry 是叶子，每个叶子最终都落到 registry.plugin">
+  flowchart TB
+    YML["cordis.yml + cordis.patch.yml<br/>（vendor/include）"] --> INC["Include extends EntryTree<br/>include/src/index.ts"]
+    INC --> PATCH["applyEntryPatches<br/>按 id 整字段覆盖 / insert"]
+    PATCH --> GRP["EntryGroup.update<br/>并发 create 全部子 Entry"]
+    GRP --> ENT["Entry.init → _init → _start<br/>config/entry.ts"]
+    ENT --> REG["ctx.registry.plugin<br/>（第 01 章）"]
+    REG --> FIB["Fiber：INACTIVE → ACTIVE"]
+    ISO["isolate.ts<br/>LocalRealm / GlobalRealm"] -.-> ENT
+</MermaidDiagram>
+
+| 文件 | 行数 | 本章要回答的问题 |
+|---|---|---|
+| `vendor/loader/src/index.ts` | ~203 | Loader 自己是什么？config 里的 `!!js` 在哪一刻被求值？ |
+| `vendor/loader/src/config/entry.ts` | ~304 | 一个 Entry 从 import 到激活的完整路径；disabled 怎么算？ |
+| `vendor/loader/src/config/group.ts` | ~130 | 一组插件是顺序启动还是并发启动？失败怎么回滚？ |
+| `vendor/loader/src/config/tree.ts` | ~167 | 运行时新增插件用哪个 API？ |
+| `vendor/loader/src/config/isolate.ts` | ~174 | preset 的服务为什么不会污染全局命名空间？ |
+| `vendor/include/src/index.ts` | ~378 | YAML 的 `!!js` 方言怎么定义？patch 的语义是什么？ |
+| `vendor/loader/src/config/utils.ts` | ~33 | `evaluate` / `interpolate` 这两个小函数到底干了什么？ |
+
+## 源码深潜
+
+<CodeWalk file="vendor/loader/src/config/entry.ts" lines="290-302" symbol="Entry._start" title="精读 1：挂载路径真相——启动按钮藏在 _start 里">
+
+<div slot="code">
+
+```ts
+
+  private async _start(plugin: any) {
+    let fiber: Fiber | undefined
+    try {
+      await this._patchContext([])
+      this.loader.showLog(this, 'apply')
+      fiber = this.fiber = this.ctx.registry.plugin(plugin, this.options.config, this.getOuterStack)
+      await fiber.await()
+    } catch (error) {
+      await this._dispose(fiber)
+      throw error
+    }
+  }
+```
+
+</div>
+
+这就是「YAML 里的一行变成活插件」的最后一公里。完整路径是：
+
+1. `Entry.init()` 缓存 `_initTask` 防止并发重复初始化，然后调 `_init()`。
+2. `_init()` 用 `tree.import(name)` 动态 import 模块，`unwrapExports` 摊平 ESM/CJS/default 形态。
+3. `_start()` 先做 `_patchContext`（把 entry 的 ctx 挂到父级原型链上，isolate 插件在这里换装命名空间），然后调用上一章精读过的主角：`ctx.registry.plugin(plugin, config)`。
+4. `fiber.await()` 等到插件真正 ACTIVE；任何一步抛错就 `_dispose` 清扫现场再把错误抛上去。
+
+所以记住：**本仓库没有 `loader.start()`**。启动一个配置行是 `Entry.init`，运行时新增一行是 `ctx.loader.create(...)`，「重启」是 dispose 旧的再 create 新的。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/include/src/index.ts · vendor/loader/src/config/entry.ts" lines="9-15 · 100-108" symbol="JsExpr / Entry.disabledOf" title="精读 2：!!js 方言——只许在 config 和 disabled 里跳舞">
+
+<div slot="code">
+
+```ts
+// vendor/include/src/index.ts
+const JsExpr = new yaml.Type('tag:yaml.org,2002:js', {
+  kind: 'scalar',
+  resolve: (data) => typeof data === 'string',
+  construct: (data) => ({ __jsExpr: data }),
+  predicate: isJsExpr,
+  represent: (data) => data['__jsExpr'],
+})
+
+// vendor/loader/src/config/entry.ts
+private disabledOf(options: EntryOptions): boolean {
+  return isJsExpr(options.disabled)
+    ? Boolean(this.evaluate(options.disabled.__jsExpr))
+    : Boolean(options.disabled)
+}
+```
+
+</div>
+
+`!!js` 是一个 YAML 自定义标签：写 `disabled: !!js "env.DSH_PROFILE === 'full'"`，Include 的 schema 会把它解析成一个带 `__jsExpr` 字段的对象，而不是字符串。
+
+关键在于**这个对象在哪里被求值，是由字段位置决定的**：
+
+- `disabled` 字段：`disabledOf` 认出 `__jsExpr`，用 `evaluate` 在 **loader 的 ctx** 上求值（`utils.ts` 里就是 `with (ctx) eval(expr)`，作用域是整个 loader 上下文）。
+- `config` 字段：在插件激活时经 `internal/config` waterfall 递归插值（下一个精读细说）。
+- `id` / `name` / `inject` 等其它元数据：**保持字面**。一个没被求值的表达式对象是 truthy 的——postmortem 0002 里，当年的代码对 `disabled` 还不求值，七个文件系统插件因此「永久 disabled」，快照测试还把错误结果录成了正确答案。如今 `disabled` 已经会求值，但 `verify-cordis-config` 门禁仍然拒绝元数据位置上的任何表达式节点。
+
+另外写标签时是 `!!js`（YAML 二次标签），不是 `!js`——少一个叹号就是另一个语义了。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/loader/src/index.ts" lines="91-101" symbol="Loader.constructor" title="精读 3：internal/config——config 插值的唯一生效点">
+
+<div slot="code">
+
+```ts
+
+    ctx.on('internal/config', function (this: Fiber, _config, next) {
+      const config = next()
+      if (!this.entry || this.parent.fiber?.entry === this.entry) return config
+      // Tree carriers (Group, Include) keep their configs literal: their
+      // entry and patch lists hold other rows' configs, whose `!!js`
+      // expressions belong to those rows' own fibers.
+      const plugin = this.runtime?.callback as Record<PropertyKey, unknown> | undefined
+      if (plugin?.[EntryGroup.key]) return config
+      return interpolate(this.ctx, config)
+    }, { global: true })
+```
+
+</div>
+
+Loader 构造时挂了一个全局 waterfall 监听器，钩在 Cordis 的 `internal/config` 上——Fiber 每次把 config 交给插件体之前都要过这一关。三段守卫逐层放行：
+
+- 这个 Fiber 不属于任何 Entry（或者是 Entry 自己的子插件）→ 原样放行。
+- 插件带着 `EntryGroup.key` 标记（Group 和 Include 都声明了它）→ **跳过插值，保持字面**。原因写在注释里：Group/Include 的 config 内容是「其它行的 entry 与 patch 列表」，里面嵌套的 `!!js` 属于那些行自己的 Fiber，必须在各自的上下文里延迟求值，不能在载体这一层提前兑现。
+- 其余情况 → `interpolate(ctx, config)` 递归地把每个表达式对象换成求值结果。
+
+注意 `const config = next()` 在最前面——先委托拿到下游结果，再决定要不要加工。这也是瀑布监听器「必须 next」的正确姿势。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/include/src/index.ts" lines="120-124" symbol="applyEntryPatches" title="精读 4：patch 是整字段覆盖，不是 deep merge">
+
+<div slot="code">
+
+```ts
+
+    for (const [key, value] of Object.entries(overrides)) {
+      if (key === 'id') continue
+      target[key] = value
+    }
+```
+
+</div>
+
+dsh 的 profile 由四层 patch 叠加而成（bundle → profile patch → home patch → `--patch`），全部汇进 `applyEntryPatches` 这一个函数。它的覆盖语义朴素到残酷：**按 id 找到目标行，然后把 patch 里的每个字段整个拍上去**。
+
+这意味着：
+
+- patch 里写 `config: { model: 'deepseek-chat' }`，目标行的整个 `config` 就被替换成这个单键对象——原来 config 里的其它字段不会保留。想改一个键，就得把整个 config 重写一遍。
+- `name` 字段是安全检查（116-119 行）：patch 声明的 name 与目标不一致就警告并跳过，防止你 patch 错了行。
+- `insert` 是另一种形态：往根或某个 group 行里追加整条 entry，而且同层后插入的行可以被同层后续 patch 命中（96-101 行专门为此重建索引）。
+
+「merge 还是 replace」是这个仓库最容易想当然的地方。答案是 replace，写 overlay 时请务必整字段重写。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/loader/src/config/group.ts" lines="58-83" symbol="EntryGroup.update" title="精读 5：Group 并发激活——启动顺序 ≠ YAML 行序">
+
+<div slot="code">
+
+```ts
+
+  async update(config: EntryOptions[]) {
+    const oldConfig = this.data as EntryOptions[]
+    const seen = new Set<string>()
+    for (const options of config) {
+      const id = this.tree.ensureId(options)
+      if (seen.has(id)) throw new TypeError(`duplicate loader entry id: ${id}`)
+      seen.add(id)
+    }
+    const oldMap = Object.fromEntries(oldConfig.map(options => [options.id, options]))
+    const newMap = Object.fromEntries(config.map(options => [options.id, options]))
+
+    try {
+      const outcomes = await Promise.allSettled(config.map(options => this.create(options)))
+      // Disposal owns termination: sibling starts can still be settling after
+      // the containing tree has gone away, but their failures no longer
+      // describe a live update to roll back.
+      if (this.ctx.fiber.uid === null) return
+      const failures = outcomes
+        .filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected')
+        .map(outcome => outcome.reason)
+      if (failures.length === 1) throw failures[0]
+      if (failures.length > 1) throw new AggregateError(failures, 'loader entries failed to apply')
+      for (const id of Object.keys(oldMap)) {
+        if (!newMap[id]) await this.remove(id, true)
+      }
+```
+
+</div>
+
+看清这行：`Promise.allSettled(config.map(options => this.create(options)))`——**同组所有 Entry 是并发开始激活的**，谁也不等谁。
+
+那「A 插件依赖 B 插件」怎么办？靠的是第 01 章的 Fiber 依赖机制：声明了 `inject: ['shell']` 的 Fiber 会停在 INACTIVE，直到 shell 服务被某个并发的兄弟插件 provide 出来才继续。所以真正的激活顺序由**依赖拓扑**决定，YAML 里的行序只影响 id 查重和存储顺序，不影响启动时序。
+
+失败处理是事务式的：任何一个 create 失败，函数会把本次新增的行逆序 remove（87-94 行），再逐行重建旧配置（95-101 行），整套回滚跑完才把错误抛出去。75 行那个提前返回也很讲究：如果整棵树已经没了（`fiber.uid === null`），兄弟行的失败就不再属于「一次活着的更新」，直接放弃回滚。
+
+卸载方向同理：`stop()` 逐行 `remove`，每行的 Fiber 内部再逆序执行 disposer——装配正序、拆卸逆序，和第 01 章的 effect 栈一脉相承。
+
+</CodeWalk>
+
+<CodeWalk file="vendor/loader/src/config/isolate.ts" lines="47-68" symbol="LocalRealm / GlobalRealm" title="精读 6：isolate realm——给 preset 发一间独立包房">
+
+<div slot="code">
+
+```ts
+
+/** Entry-local isolation realm. */
+export class LocalRealm extends Realm {
+  constructor(private entry: Entry) {
+    super()
+  }
+
+  get suffix() {
+    return '#' + this.entry.options.id
+  }
+}
+
+/** Named isolation realm shared by entries that use the same label. */
+export class GlobalRealm extends Realm {
+  constructor(public label: string) {
+    super()
+  }
+
+  get suffix() {
+    return '@' + this.label
+  }
+}
+```
+
+</div>
+
+Cordis 的服务表 `ctx.reflect.store` 是用 **Symbol** 做键的。普通服务存进 `Symbol('shell')` 这样的全局键，谁都能查到；而 Entry 在 options 里声明了 `isolate` 之后，isolate 插件（Loader 构造函数最后一行 `ctx.plugin(isolate)` 装的就是它）会把这个服务名映射到一个带后缀的私有 Symbol：
+
+- `isolate: { foo: true }` → `LocalRealm`，后缀是 `#<entry id>`，**这条 entry 独享**，外部完全不可见。
+- `isolate: { foo: 'myLabel' }` → `GlobalRealm`，后缀是 `@myLabel`，**同名标签的 entry 共享**这个命名空间。
+
+`loader/patch-context` 监听器（isolate.ts 96-153 行）负责在 Entry 启动前完成换装：生成新的 isolate 映射、算出新旧服务 Symbol 的 diff、搬移 `reflect.store` 里的实现、最后 `reflect.notify` 唤醒等待注入的 Fiber。
+
+dsh 的 preset（`packages/preset/agent-presets`）就靠它实现「每个会话一套独立服务」：preset 里的服务行躲在 isolate realm 后面，两个会话同时挂载同一 preset 也不会撞车；`mountPreset` 甚至会审计——preset 行若把服务发布到 root realm，直接拒绝挂载。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="一次 boot 的装配时序" caption="以 dsh --profile headless 为例：根 cordis.yml 故意为空，整棵树由 patch 层插入">
+  sequenceDiagram
+    participant U as 用户
+    participant B as bin/args
+    participant P as profile-boot
+    participant L as Loader（EntryTree）
+    participant I as Include
+    participant E as Entry
+    participant R as Registry
+    U->>B: dsh --profile headless
+    B->>P: runProfile（解析四层 patch）
+    P->>L: ctx.plugin(Loader)
+    P->>I: loader.create（cordis:include, path + patches）
+    I->>I: 读文件 + applyEntryPatches
+    I->>E: EntryGroup.update（并发 create）
+    par 并发激活（拓扑由 inject 决定）
+      E->>R: registry.plugin（agent）
+    and
+      E->>R: registry.plugin（tools）
+    end
+    R-->>E: Fiber ACTIVE
+    E-->>P: loader.await 全部落定
+</MermaidDiagram>
+
+<MermaidDiagram title="Entry.update 的决策流" caption="改配置不一定重启；改 name/inject/group 必须整体换装">
+  flowchart TB
+    U["entry.update(options)"] --> D["判断：diff 为空？"]
+    D -- 是 --> N["直接返回"]
+    D -- 否 --> DS["判断：新配置 disabled？"]
+    DS -- 是 --> DP["dispose 旧 fiber<br/>提交新 options"]
+    DS -- 否 --> RP["判断：diff 含 name/inject/group？"]
+    RP -- 否 --> PC["_patchContext<br/>仅热更新 config"]
+    RP -- 是 --> IM["import 新模块<br/>dispose 旧 fiber"]
+    IM --> ST["_start 新插件"]
+    ST -- 失败 --> RB["_start 旧插件回滚"]
+</MermaidDiagram>
+
+## 动手实验
+
+在仓库根目录验证本章结论（需要 `DEEPSEEK_API_KEY` 的实验已标注）：
+
+1. **看叠加后的树**：`pnpm dsh --profile headless --dump-config`。注意根 `cordis.yml` 本身是空数组——你看到的每一行都是四层 patch 「insert」出来的。试着加 `--patch your.yml` 再 dump 一次，观察目标行被**整字段覆盖**。
+2. **验证 `!!js` 的作用域**：在一个测试 patch 的某行 `config` 里写 `!!js` 表达式引用环境变量，启动后让该插件打印 config；再把同样的表达式挪到 `name` 字段上，`verify-cordis-config` 会直接拒绝它。
+3. **验证并发拓扑**：给一个示例插件加 `inject: ['shell']`，在 YAML 里把它排在 shell provider **前面**，启动（需 key）后它依然正常激活——行序不影响拓扑。
+4. **观察事务回滚**：在一个 group 里同时放一个好插件和一个不存在的模块名，启动时你会收到 `AggregateError: loader entries failed to apply`，而旧树原封不动。
+
+## 胖虎翻车现场
+
+> 胖虎：「我写 `disabled: !!js 'true'`，YAML 语法没问题啊，凭什么说我的配置是错的？」
+
+语法合法不等于语义生效。`!!js` 的合法域只有两处：条目的 `config`（在插件自己的 ctx 里插值）和 `disabled`（在 loader 的 ctx 里求值）。写在 `id`、`name`、`inject` 上就是给布尔判断递了一个对象——而任何对象都是 truthy。postmortem 0002 的事故比这更冤：当时的代码连 `disabled` 都还没求值，于是文件系统插件永远禁用，快照套件把「工具不存在」的输出录成了新的标准答案，绿了一路。修复后的今天，`verify-cordis-config` 门禁会在构建期就拦下元数据位置的表达式；条件组合请用 overlay（专门的 patch 文件），不要用表达式。
+
+> 胖虎的另一个经典错觉：「我在 patch 里只写了一个 config 键，其它键肯定还在吧？」——不在。patch 是整字段覆盖，详见精读 4。
+
+## 小结卡
+
+- 挂载路径：Include 读文件 → `applyEntryPatches` 叠加 → `EntryGroup.update` 并发创建 → `Entry.init/_init/_start` → `registry.plugin`。**没有 `loader.start()`**；运行时增删用 `ctx.loader.create/remove`。
+- `!!js` 只活在 `config` 与 `disabled`；其它元数据保持字面，门禁会拦。写 `!!js` 不是 `!js`。
+- patch 按 id **整字段覆盖**，insert 追加整行；同层后插入的行可被后续 patch 命中。
+- 同组 Entry **并发激活**，真实启动顺序由 Fiber 的 inject 拓扑决定，与 YAML 行序无关；失败整组事务回滚。
+- `isolate` 把服务名映射到私有 Symbol：`true` 是 entry 独享，字符串标签是命名共享——preset 的会话级隔离就靠它。
+- 下一章：插件树装好了，插件之间怎么对话？答案是 capability seam 三角——以 shell 为例。
+
+</Chapter>

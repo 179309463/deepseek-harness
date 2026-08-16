@@ -1,0 +1,340 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="08"
+  title="自改装与瘦身"
+  subtitle="agent 在运行时照镜子、写插件、当场激活来改造自己；上下文快满时，compaction 引擎用一把 durable 锁和一次 LLM 摘要给记忆瘦身"
+  prev={{ slug: '07-subagent', title: '07 分身术' }}
+  next={{ slug: '09-production', title: '09 走向生产' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦！我的 agent 干到一半，突然说「上下文快满了，我要压缩一下记忆」，转头又给自己装了个新插件？！它到底是我的助手，还是会自我改装的终结者？' },
+  { who: 'doraemon', text: '都是正经设计好的能力。一套叫自改装：照镜子看自己（inspect）→ 写新插件（define）→ 当场激活（run）。另一套叫 compaction：给快撑爆的上下文「瘦身」。' },
+  { who: 'nobita', text: '让它自己改自己……不怕它把运行时拆了吗？' },
+  { who: 'doraemon', text: '三道保险：一份写进系统提示词的使用规程、一道用户审批闸门，还有第 1 章的老朋友 effect/dispose——动态插件的每个副作用都能逆序收走。今晚全部拆开看！' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="自改装与 compaction 的双线地图" caption="上半是模型驱动的运行时改装，下半是给上下文瘦身的事务管线">
+  flowchart TB
+    subgraph TOOLS["packages/extensions/tool-cordis"]
+      T1["index.ts<br/>cordis_inspect_* / define / run / stop / undefine"]
+      T2["prompt.ts<br/>CORDIS_SYSTEM_PROMPT 使用规程"]
+      T3["inspect.ts<br/>照镜子报告渲染"]
+    end
+    subgraph RUNNER["packages/extensions/cordis-host-runner"]
+      SVC["index.ts<br/>DynamicCordisRunnerService"]
+      REG["registry.ts<br/>DynamicCordisRegistry 身份铸造"]
+      SVC --> REG
+    end
+    subgraph COMP["packages/compaction"]
+      DEF["compaction/index.ts<br/>CompactionEngine 抽象"]
+      BASIC["compaction-basic<br/>pressure / overflow 触发 + 选区"]
+      CMD["command-compact<br/>/compact 手动命令"]
+      BASIC --> DEF
+    end
+    T1 --> SVC
+    T2 --> T1
+    SVC --> FIBER["Cordis Fiber<br/>effect/dispose 热插拔"]
+    BASIC --> SESS["Session 日志<br/>compaction/start|summary|end + surface replace"]
+    CMD --> DEF
+</MermaidDiagram>
+
+| 文件 | 关键行 | 本章要回答的问题 |
+|---|---|---|
+| `packages/extensions/tool-cordis/src/index.ts` | 35-399 | 七个 cordis_* 工具如何注册？`@pluginId` 引用怎么注入上下文？ |
+| `packages/extensions/tool-cordis/src/prompt.ts` | 3-107 | 模型自改装的「使用说明书」写了哪些铁律？ |
+| `packages/extensions/tool-cordis/src/inspect.ts` | 131-209 | 「照镜子」报告由谁渲染？活服务目录从哪来？ |
+| `packages/extensions/cordis-host-runner/src/index.ts` | 151-202、248-312、883-915 | define/run 的状态机；Host 半边如何沙箱激活？ |
+| `packages/extensions/cordis-host-runner/src/registry.ts` | 141-276 | pluginId / packageId / pluginRunId 三重身份谁来铸？ |
+| `packages/compaction/compaction/src/index.ts` | 96-172 | CompactionEngine 这条 seam 的三个抽象方法 |
+| `packages/compaction/compaction-basic/src/index.ts` | 137-224、258-332 | 压力与 overflow 两个触发口；prune → 摘要 → 保留尾部的策略 |
+| `packages/compaction/compaction-basic/src/region.ts` | 98-134、152-254 | 选区规则与 durable 锁事务长什么样？ |
+| `packages/compaction/compaction-basic/src/summarizer.ts` | 31-70、121-182 | 摘要调用如何白嫖 KV cache？ |
+| `packages/compaction/command-compact/src/index.ts` | 58-106 | `/compact` 手动命令怎么接到 compactNow？ |
+
+## 源码深潜
+
+<CodeWalk file="packages/extensions/tool-cordis/src/index.ts" lines="35-58" symbol="apply" title="精读 1：三件套之一——先学会照镜子">
+
+<div slot="code">
+
+```ts
+export function apply(ctx: Context): void {
+  ctx.systemPrompt.section({ name: 'tool:cordis', order: 115, text: CORDIS_SYSTEM_PROMPT })
+  for (const provider of hostInspectProviders(ctx)) {
+    ctx.effect(() => ctx.cordisInspect.register(provider), `tool-cordis: inspect ${provider.manifest.id}`)
+  }
+
+  ctx.tools.register(defineTool({
+    name: 'cordis_inspect_list',
+    description:
+      'List every Cordis Inspect Provider currently known to the Host, including local Host Providers and the latest '
+      + 'manifests synchronized from the Client. Each entry includes its platform, purpose, read-only methods, and '
+      + 'input/output schemas. Call this Tool before creating or modifying a Package, then select the provider and '
+      + 'method for cordis_inspect_query from its result. Do not guess names or treat an Inspect method as a business '
+      + 'Service that Plugin code can call.',
+    parameters: {},
+    output: {
+      schema: { type: 'json' },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+    },
+    execute(_args, _exec): Promise<JsonValue> {
+      return Promise.resolve({ providers: ctx.cordisInspect.list() } as unknown as JsonValue)
+    },
+    presentCall: presentInspectListCall,
+  }))
+```
+
+</div>
+
+`apply` 一进场就做了三件事，顺序本身就是教学：
+
+1. **先交规程**：`CORDIS_SYSTEM_PROMPT` 以 `order: 115` 插进系统提示词——模型在拿到工具之前，先拿到「使用说明书」。
+2. **再装镜子**：每个 Inspect Provider 通过 `ctx.effect` 注册进 `ctx.cordisInspect` 注册表——还记得第 1 章吗，注册即副作用，卸载即逆序撤销。
+3. **最后发工具**：`cordis_inspect_list` 只读列出 Host 与 Client 两侧全部 Provider；同文件往下还有 `cordis_inspect_query`（精确查签名）、`cordis_inspect_self`（查本会话的动态插件），然后才是 `cordis_define` / `cordis_run` / `cordis_stop` / `cordis_undefine`（41-379 行）。
+
+为什么照镜子排在改装前面？看 381-398 行的 `agent/pre-step` 监听器就知道：用户输入 `@pluginId` 时，插件会把该插件的身份、版本指针、运行状态作为上下文消息注入，但**故意不含源码**——模型必须先 `cordis_inspect_self` 读回精确源码才能动手改。先照镜子，再动刀子。
+
+</CodeWalk>
+
+<CodeWalk file="packages/extensions/tool-cordis/src/prompt.ts" lines="2-20" symbol="CORDIS_SYSTEM_PROMPT" title="精读 2：给模型的「改装安全规程」">
+
+<div slot="code">
+
+```ts
+
+export const CORDIS_SYSTEM_PROMPT = `# Dynamic Cordis Plugins
+
+Dynamic Cordis plugins temporarily extend the current DSH process. A Plugin uses apply(ctx) to consume Services, listen to Events, provide Services, register model Tools, or register browser UI in Slots.
+
+- Plugin and Package definitions exist only in the current process. define itself does not modify repository source, configuration, or disk, and definitions do not survive a process restart.
+- The restricted execution environment prevents accidental misuse; it is not a security boundary for malicious code. Services obtained by dynamic code connect to the real runtime.
+
+## Make the user-facing plan clear first
+
+- Dynamic Cordis Plugins are one available implementation mechanism, not the default for every request. Consider whether one could help only when the user intends to design or create something, or when a temporary interface could materially aid the current work. The presence of these instructions or Tools, and discussion of Cordis itself, do not make a request a dynamic-Plugin task.
+- When Cordis is a plausible fit, infer the intended work target and lifetime from the request and conversation. Use it only when the outcome belongs to the current running harness and should be delivered as a temporary runtime extension. If that distinction is materially ambiguous, ask at most one concise question about the intended result or lifetime. Otherwise proceed with the matching workflow; do not require the user to know or choose Cordis as an implementation mechanism.
+- Once a dynamic Plugin is appropriate, decide whether the task creates a new Plugin or modifies the Plugin named by the user with @pluginId. Proceed directly when the goal is clear; do not ask for repeated confirmation.
+- Choose Host, Client, or both from the requested outcome. Do not propose a Client/browser UI when the task does not need visible page behavior, and do not avoid Client when the requested outcome is visual, interactive, or depends on page state. Host versus Client is an implementation choice; do not make the user choose it.
+- When a design direction or a potentially useful interface would materially affect the result, ask at most one concise outcome or creative-preference question and offer a few candidate directions. Otherwise proceed directly; do not conduct a multi-round interview or a complex questionnaire.
+- cordis_define only defines and presents code; it does not run it. After definition, explain the pluginId and packageId returned by the Host and whether the next step is a run or update.
+- cordis_run may require user approval. When it returns awaiting-approval, explain that the user must allow or reject it in the UI. Do not wait, retry, or claim that it is running.
+- When it returns starting, explain that the request has entered the asynchronous flow and the Client is still activating. starting does not mean success. Wait for the system to report the final result through steering context.
+- Do not request approval again after the user rejects it. After a technical failure, fix the same Plugin from its diagnostics; do not silently create a replacement Plugin.
+```
+
+</div>
+
+这 107 行提示词是自改装真正的「安全带」。逐条拆它的设计意图：
+
+- **划定边界**：定义只活在当前进程内存里，不写盘、不改仓库——所以 dsh 重启后动态插件天然清零，不存在「改装残留」。
+- **诚实的威胁模型**：沙箱「防误用，不防恶意代码」——这句话写在规程里，提醒模型（和读者）别把 vm 沙箱当安全边界，真正的闸门是用户审批。
+- **状态机纪律**：`cordis_run` 返回 `awaiting-approval` 时不许假装成功、不许轮询、被拒后不许重复请求；失败后**修同一个 Plugin**，不许偷偷新开一个顶替。
+- 规程后半（56-107 行）还预演了高频翻车：可选服务用 `ctx.get`、硬依赖才写 `inject`、只写纯 JS（没有 TypeScript/JSX 转换）、别把活对象 `JSON.stringify`、**每个副作用必须可逆**。
+
+写模型可见文本的第一原则在这里体现得淋漓尽致：全程站在模型视角说话，不出现 UI、传输层、实现的词汇。
+
+</CodeWalk>
+
+<CodeWalk file="packages/extensions/cordis-host-runner/src/index.ts" lines="897-914" symbol="DynamicCordisRunnerService.startHost" title="精读 3：define 只是登记，run 才通电——Host 半边的沙箱激活">
+
+<div slot="code">
+
+```ts
+    try {
+      const sandbox = createSandbox(plugin.pluginId, { handle })
+      const evaluated = await evaluateHostCode(sandbox, hostCode, plugin.pluginId, this.resolved.vmTimeoutMs)
+      if (!isPlugin(evaluated)) {
+        throw new Error(evaluated === undefined
+          ? 'the Host half returned `undefined` — did you forget `return`?'
+          : 'the Host half must return a Plugin function or an object with apply(ctx)')
+      }
+      run.fiber = await startHostHalf(
+        this.requireGroup(),
+        evaluated,
+        (error) => { this.steerGuardFailure(plugin, run, 'Host', errorDetails(error)) },
+      )
+      return undefined
+    } catch (error) {
+      for (const dispose of run.handlerDisposers.splice(0)) dispose()
+      return errorDetails(error)
+    }
+```
+
+</div>
+
+工具层与服务层的分工先厘清：`cordis_define` 走到服务的 `define`（151-202 行），只做参数校验、语法预检（`precheckCode`）和入库——**一行代码都不执行**。真正通电是 `cordis_run` 之后的 `startHost`：
+
+1. `createSandbox` + `evaluateHostCode` 在 vm 沙箱里求值模型写的纯 JS 函数体，同步超时由 Config 的 `vmTimeoutMs`（默认 5000ms，127-129 行）卡住。
+2. 返回值必须过 `isPlugin` 校验——这就是第 1 章 `RegistryService.plugin` 认识的三种形态之一：函数或带 `apply` 的对象。
+3. `startHostHalf` 把它**挂成一个真正的 Cordis Fiber**，挂在 `cordis-dynamic` 组插件（`requireGroup`，1237-1240 行）下面。于是热插拔不用发明新机制：stop/undefine 就是 `fiber.dispose()`，effect 链逆序清理，和任何普通插件一模一样。
+4. catch 里先把已注册的 Host handler 全部 dispose 再上报——**失败路径也不留副作用**。
+
+Client 半边不在 Node 进程里跑：浏览器通过 Typert `@Remote` 方法（`runHostHalf`、`getClientCode`、`invoke` 等）与 Host 对暗号，含 Client 代码的 Package 还要先过用户审批（`run` 的 270-311 行：未授权就停在 `awaiting-approval`）。Host 管文件/网络/Agent，Client 管主题/Slot UI，两边只许无损 JSON 来往——这就是 host runner 与 client runner 的分工。
+
+</CodeWalk>
+
+<CodeWalk file="packages/compaction/compaction-basic/src/index.ts" lines="146-165" symbol="BasicCompactionEngine._registerAutomaticCompaction" title="精读 4：瘦身的第一触发口——每一步开工前先称体重">
+
+<div slot="code">
+
+```ts
+
+    ctx.on('agent/pre-step', async (
+      { agent, signal },
+      next,
+    ): Promise<PreStepDecision> => {
+      if (!signal.aborted) {
+        try {
+          const result = await this.compactIfNeeded(agent, 'pressure', signal)
+          if (result !== null) logResult(result, 'step pressure')
+        } catch (error: unknown) {
+          if (error instanceof TargetPressureConfigError) {
+            if (this.warnedPressureConfigTargets.has(error.targetKey)) return next()
+            this.warnedPressureConfigTargets.add(error.targetKey)
+          }
+          const message = error instanceof Error ? error.message : String(error)
+          ctx.logger.warn(`step compaction failed: ${message}; continuing the turn`)
+        }
+      }
+      return next()
+    })
+```
+
+</div>
+
+compaction 挂在第 5 章讲过的 `agent/pre-step` waterfall 上：**每次模型调用之前**，先用 `ctx.tokenMeter` 给当前 surface 称体重，超过路由模型的 `thresholdRatio` 阈值就触发 `pressure` 压缩。
+
+注意两个防御细节：
+
+- 压缩失败只 `warn` 然后 `return next()`——**瘦身是优化，不是闸门**；配置错了（`TargetPressureConfigError`）每个目标只警告一次，避免刷屏。
+- 它是 waterfall 监听器，规约铁律：结束时必须 `next()` 把决策权交回主流程。
+
+第二触发口在 179-223 行的 `agent/request-error`：provider 确认 `CONTEXT_WINDOW_EXCEEDED` 时走 `context-overflow` 恢复——绕过正常阈值强制压一轮，然后返回 `{ kind: 'retry' }` 让 loop 重试；重试次数有 `maxOverflowRetries` 上限，一次成功响应就清零（167-177 行）。两条路径都先尝试 `pruneSession`（可选的 `toolResultPruner` 服务，把超长工具结果截头去尾），再选区做 LLM 摘要，最后保留最近 `retainTokens` 预算的尾部原文。
+
+</CodeWalk>
+
+<CodeWalk file="packages/compaction/compaction-basic/src/region.ts" lines="189-213" symbol="compactSurfaceRegion" title="精读 5：一把 durable 锁 + 一次 surface replace 的压缩事务">
+
+<div slot="code">
+
+```ts
+  const startEvent = session.append('compaction/start', lifecycle)
+  const assertStable: StabilityCheck = options.stability === 'whole-surface'
+    ? assertWholeSurfaceUnchanged
+    : assertSelectedSpanStable
+  let failure: TransactionFailure | undefined
+  let flushFailure: unknown
+  let result: CompactionResult | undefined
+  let closed = false
+  let closing = false
+  let stage: TransactionFailure['stage'] = 'summary'
+
+  try {
+    const prepared = prepareCompaction(dependencies, session, selection)
+    const summarized = await summarizeCompaction(
+      dependencies,
+      prepared,
+      agent,
+      compactionId,
+      options.sourceCommandId,
+      signal,
+    )
+    if (options.owner === null) signal?.throwIfAborted()
+    assertStable(dependencies, session, summarized)
+    stage = 'commit'
+    const pending = commitCompactionBody(session, startEvent, summarized)
+```
+
+</div>
+
+整个压缩是一次**记录在日志里的事务**，durable 锁就是 `compaction/start` 这个事件本身：
+
+1. **上锁**：`session.append('compaction/start', …)`。因为它是 durable 的，进程崩溃重启后日志里仍留着一个「未配对」的 start，`assertCompactionInactive`（286-298 行）会拒绝并发压缩——内存锁做不到的，日志锁做到了。
+2. **摘要**：`summarizeCompaction` 调 LLM 把选区浓缩成结构化 checkpoint。妙处在 summarizer.ts：摘要请求**原样重放本会话的 system prompt、工具列表和消息前缀**，只在尾巴追加一条压缩指令——对 provider 来说这是一次真前缀调用，**KV cache 直接复用**，省钱省延迟。
+3. **复查**：摘要返回后 `assertStable` 重测 surface——异步期间有人改了历史就抛 `SurfaceChangedError`，绝不拿旧摘要盖新历史。
+4. **落盘**：`commitCompactionBody`（427-478 行）追加 `compaction/summary` 事件，再追加一条来源为 compact checkpoint 的 `user/message`，带 `surfaceOp: { op: 'replace', start, end }`——第 4 章的 surface 投影在这里完成「一段历史换一个节点」的替换。
+5. **解锁**：任何结局都恰好尝试一次 `compaction/end`——成功路径在紧随其后的 214-217 行，失败也在 218-229 行的 catch 里补写带 `error` 的 end，尝试记录永久留在日志里。
+
+手动 `/compact` 走的是同一台机器：`command-compact` 调 `compactNow`，经 `agent.runMaintenance` 确认 agent 空闲后以 `owner: null` 开一个独立事务，还多要一个 `sessions.flush` 耐久检查点——人下的命令，值得一次落盘保证。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="一次完整的自改装旅程" caption="define 不动电；含 Client 代码的 run 先过用户审批；失败经 steering 回到模型上下文">
+  sequenceDiagram
+    participant M as 模型
+    participant T as tool-cordis 工具
+    participant R as dynamicCordisRunner
+    participant U as 用户
+    participant F as Cordis Fiber
+    M->>T: cordis_inspect_list / _query
+    T-->>M: 活服务与签名目录
+    M->>T: cordis_define（纯 JS 函数体）
+    T->>R: define：预检 + 入库
+    R-->>M: pluginId / packageId（未激活）
+    M->>T: cordis_run（run / update）
+    alt 含 Client 半边且未授权
+      R-->>U: approval 请求（awaiting-approval）
+      U-->>R: 允许一次 / 授权未来版本
+    end
+    R->>F: 沙箱求值 + startHostHalf 挂载
+    F-->>R: Fiber ACTIVE / inject 等待中
+    R-->>M: running 或 starting
+    Note over R,M: 异步失败经 agent.steer 回写<br/>模型读诊断后修同一 Plugin 重试
+</MermaidDiagram>
+
+<MermaidDiagram title="compaction 事务流" caption="三个入口汇入同一台事务机器；锁是 durable 的，替换是 surface 级的">
+  flowchart LR
+    P["agent/pre-step<br/>pressure 压力检查"] --> M["tokenMeter.measure 称体重"]
+    O["agent/request-error<br/>context-overflow 恢复"] --> M
+    C["/compact 手动命令<br/>compactNow + runMaintenance"] --> M
+    M --> PR["toolResultPruner 在吗？"]
+    PR -->|在| PR2["prune 旧工具结果<br/>截头去尾留标记"]
+    PR -->|不在| SEL
+    PR2 --> SEL["selectCompactableRange<br/>保留 retainTokens 尾部<br/>不拆 tool-call/result 对"]
+    SEL --> L1["compaction/start<br/>durable 锁"]
+    L1 --> SUM["LLM 摘要<br/>前缀复用 KV cache"]
+    SUM --> CHK["surface 还稳定吗？"]
+    CHK -->|变了| FAIL["compaction/end（带 error）"]
+    CHK -->|稳定| COM["compaction/summary +<br/>user/message replace 落盘"]
+    COM --> L2["compaction/end"]
+    L2 --> FLUSH["手动路径追加<br/>sessions.flush 检查点"]
+</MermaidDiagram>
+
+## 动手实验
+
+在仓库根目录验证本章结论（需要 `DEEPSEEK_API_KEY` 的实验已标注）：
+
+1. **看 agent 改装自己**（需要 key）：`pnpm run demo:cordis`，观察模型依次调用 `cordis_inspect_list` → `cordis_define` → `cordis_run`，以及含 UI 的插件触发的审批卡片。
+2. **手动瘦身**：在 CLI 会话里聊几轮后输入 `/compact`，观察成功输出形如 `Compacted N history items (~T tokens).`；agent 忙碌时再敲一次，观察 `busy` 错误文案。
+3. **keyless 看锁与错误分类**：`pnpm exec vitest run packages/compaction/compaction-basic/tests/manual-compaction.spec.ts`，这套测试不需要 API key，覆盖 `compaction/start` 锁、并发拒绝与六类 `ManualCompactionError`。
+4. **观察自动压力触发**（需要 key）：`pnpm dsh --profile headless "把一个 2000 行文件分块读入并总结"`，盯 stderr 里 `compaction (step pressure): shadowed N surface nodes` 的日志行——那就是精读 4 里 `logResult` 打的。
+
+## 胖虎翻车现场
+
+> 胖虎：「我让 agent 给我写个动态插件，它 `cordis_define` 三次全报错！什么破工具！」
+
+胖虎让模型写的「插件」里带着 TypeScript 泛型和 `import`——而 define 的预检（`precheckCode`）只接受**纯 JavaScript 函数体**，不做任何 TS/JSX/打包转换，`code.host` 里有类型标注直接拒收。规程第 75-80 行早就写了这条，胖虎没读。
+
+好不容易改成纯 JS 跑起来了，胖虎又让插件「每 5 秒打印一次心跳」，写的是裸 `setInterval`。`cordis_stop` 之后，控制台还在咚咚咚——定时器没走 `ctx.effect`，Fiber dispose 时没人替它收尸。规程第 88-92 行同样写了：**每个副作用必须可逆**，要么 `ctx.effect`，要么官方返回 disposer 的 API。两条铁律都在提示词里，翻车只因为没读说明书。
+
+## 小结卡
+
+- 自改装三件套：`inspect`（照镜子）→ `define`（只登记不动电）→ `run`（沙箱求值 + 挂 Fiber 通电）；`stop` 保留版本、`undefine` 永久删除。
+- 热插拔不是新机制：动态插件就是普通 Cordis 插件，effect/dispose 逆序清理兜底一切副作用。
+- `CORDIS_SYSTEM_PROMPT` 是模型视角的安全规程：进程内存边界、审批纪律、失败修同一个 Plugin、副作用必须可逆。
+- compaction 双触发：`agent/pre-step` 压力检查 + `agent/request-error` overflow 恢复；策略是 prune 旧工具结果 → LLM 摘要中间历史 → 保留 `retainTokens` 尾部。
+- 事务三件套：durable `compaction/start` 锁、摘要后稳定性复查、`surfaceOp: replace` 落盘；`/compact` 手动命令多要一次 flush。
+- 下一章：agent 怎么从终端玩具走向生产线——ACP 与 JSON-RPC SDK 两条对外协议，加上快照测试和 gates 的工程纪律。
+
+</Chapter>

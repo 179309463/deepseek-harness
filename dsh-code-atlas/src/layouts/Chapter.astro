@@ -1,0 +1,45 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  num: string;
+  title: string;
+  subtitle: string;
+  prev?: { slug: string; title: string };
+  next?: { slug: string; title: string };
+}
+
+const { num, title, subtitle, prev, next } = Astro.props;
+---
+
+<Base title={`第 ${num} 章 · ${title}`}>
+  <article class="prose-atlas mx-auto w-full">
+    <header class="comic-card mb-10 overflow-hidden">
+      <div class="chapter-hero border-b border-white/20 bg-dora text-white">
+        <div class="text-sm font-bold tracking-widest opacity-80">CHAPTER {num}</div>
+        <h1 class="text-3xl font-extrabold">{title}</h1>
+        <p class="text-white/90">{subtitle}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 bg-card px-6 py-3 text-xs text-ink/60">
+        <span>阅读姿势：先看漫画条进入剧情 → 跟架构图建立全局 → 逐个 CodeWalk 精读真实代码 → 动手实验验证</span>
+      </div>
+    </header>
+
+    <slot />
+
+    <nav class="mt-14 grid gap-4 sm:grid-cols-2">
+      {prev ? (
+        <a href={`/chapters/${prev.slug}`} class="comic-card comic-card-hover block p-4">
+          <div class="text-xs text-ink/50">← 上一章</div>
+          <div class="font-bold text-dora-deep">{prev.title}</div>
+        </a>
+      ) : <span />}
+      {next ? (
+        <a href={`/chapters/${next.slug}`} class="comic-card comic-card-hover block p-4 text-right">
+          <div class="text-xs text-ink/50">下一章 →</div>
+          <div class="font-bold text-dora-deep">{next.title}</div>
+        </a>
+      ) : <span />}
+    </nav>
+  </article>
+</Base>

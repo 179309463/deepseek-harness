@@ -1,0 +1,353 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="06"
+  title="分层与审批"
+  subtitle="profile 根目录里的 cordis.yml 居然恒为空数组——整个 agent 是 bundle、patch、--patch 四层「换装」叠出来的；而模型每动一次手，都要先过 tools/pre-execute 这道审批闸门"
+  prev={{ slug: '05-agent-loop', title: '05 循环内部' }}
+  next={{ slug: '07-subagent', title: '07 分身术' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '哆啦A梦！我打开 ~/.dsh/profiles/headless/cordis.yml 想看我的 agent 配置，结果里面只有一个空荡荡的 []！我的插件呢？被谁吃了？' },
+  { who: 'doraemon', text: '没人吃。这个文件天生就该是空的——dsh 的 profile 是换装人偶：本体光溜溜，衣服一层一层往上套。bundle 是内衣，你的 cordis.patch.yml 是外套，--patch 是临时披风。' },
+  { who: 'nobita', text: '那要是模型自己「换」了件危险的衣服呢？比如它想执行 rm -rf……' },
+  { who: 'doraemon', text: '问得好，这就是今天的第二条线：每个工具调用落地前，都要过一道叫 tools/pre-execute 的审批闸门。而且它有个铁脾气——找不到人审批，就默认拒绝。出发！' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="四层 patch 叠加与装配链路" caption="空根 cordis.yml 之上，四层 patch 依序覆盖；越靠右的层优先级越高">
+  flowchart LR
+    subgraph CLI["apps/cli"]
+      ARGS["args.ts<br/>--profile / --patch 解析"]
+      PB["profile-boot.ts<br/>allPatches 四层叠加"]
+    end
+    subgraph BOOT["packages/boot/app-boot"]
+      PROF["profile.ts<br/>loadProfile / composeEntries"]
+      BOOTF["index.ts<br/>boot()"]
+    end
+    L1["第 1 层：profile bundles（有序）<br/>dsh-base 等 cordis.patch.yml"]
+    L2["第 2 层：profile cordis.patch.yml<br/>你这个 profile 的私有覆盖"]
+    L3["第 3 层：$DSH_HOME/cordis.patch.yml<br/>机器级偏好，压过单 profile"]
+    L4["第 4 层：--patch（可重复）<br/>一次性实验披风"]
+    ROOT["profile/cordis.yml<br/>恒为空数组 []"]
+    ARGS --> PB
+    PB --> PROF
+    L1 --> L2 --> L3 --> L4
+    L4 --> PROF
+    ROOT --> BOOTF
+    PROF --> BOOTF
+</MermaidDiagram>
+
+| 文件 | 关键行 | 本章要回答的问题 |
+|---|---|---|
+| `packages/boot/app-boot/src/profile.ts` | 113-117、371-420 | profile 到底是什么？bundle 的 patch 文件怎么被读进来？ |
+| `apps/cli/src/profile-boot.ts` | 59-64、121-129 | 空根是谁写的？四层的先后顺序由谁保证？ |
+| `apps/cli/src/args.ts` | 131-132 | `--profile` 和可重复的 `--patch` 怎么进 argv？ |
+| `packages/boot/app-boot/src/index.ts` | 757-785 | `boot()` 如何把叠好的 patch 挂上空根？ |
+| `packages/bundle/base/cordis.patch.yml` | 15-30 | 一份真实的 patch 层长什么样？ |
+| `packages/core/tools/src/index.ts` | 588-591、1474-1498、1689-1729 | 工具执行前的闸门在哪？ask 如何变成真人提问？ |
+| `packages/interaction/user-approval/src/index.ts` | 192-347 | fail-closed 的「unavailable」从哪来？审批留痕写在哪？ |
+
+## 源码深潜
+
+<CodeWalk file="packages/boot/app-boot/src/profile.ts" lines="385-402" symbol="loadProfile" title="精读 1：profile 不是配置，是一份「穿衣清单」">
+
+<div slot="code">
+
+```ts
+  const manifest = normalizeShippedProfile(name, dir, readProfileManifest(binName, dir))
+  // A hand-written profile manifest may omit the dsh section entirely.
+  const bundles = manifest.dsh?.profile?.bundles ?? []
+  const layers = bundles.map((packageName): ProfileLayer => {
+    const packageDir = resolveBundleDir(binName, packageName, installAnchor, dir)
+    const bundleManifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as ProfileManifest
+    const declared = bundleManifest.dsh?.bundle?.patch
+    if (declared === undefined) {
+      throw new Error(`${binName}: profile bundle ${JSON.stringify(packageName)} declares no dsh.bundle in its package.json`)
+    }
+    const patchPath = join(packageDir, declared)
+    return { packageName, packageDir, patchPath, patches: loadOverlayPatches(binName, patchPath) }
+  })
+  const patchPath = join(dir, PROFILE_PATCH_FILENAME)
+  const patches = options.userLayer !== false && existsSync(patchPath)
+    ? loadOverlayPatches(binName, patchPath)
+    : []
+  return { name, dir, layers, patchPath, patches }
+```
+
+</div>
+
+很多人对 profile 的第一印象是「一份大配置文件」——错了。`loadProfile` 揭示真相：profile 目录的 `package.json` 里只有一个 `dsh.profile.bundles` 数组，它是**一份有序的 bundle 名单**。
+
+- 名单的初始值来自 `PROFILE_TEMPLATES`（113-117 行）：`web` 是 `dsh-base + dsh-web-app`，`headless` 是 `dsh-base + dsh-headless`。首次使用时自动初始化。
+- 每个 bundle 必须在自己的 `package.json` 里声明 `dsh.bundle.patch` 指向一个 patch 文件，**没声明就直接抛错**——「把一个不含 bundle 的包当层用」被定义为配置错误，而不是「没有 patch」。这是仓库「misconfiguration fails loud」规约的典型样本。
+- 最后才读 profile 自己的 `cordis.patch.yml`——注意它排在所有 bundle 之后。
+
+</CodeWalk>
+
+<CodeWalk file="apps/cli/src/profile-boot.ts" lines="120-129" symbol="allPatches" title="精读 2：allPatches——四层叠加的唯一真相">
+
+<div slot="code">
+
+```ts
+
+/** The full patch stack of one composed profile, in application order. */
+function allPatches(composed: ComposedProfile): PatchOptions[] {
+  return [
+    ...composed.bundlePatches,
+    ...composed.profile.patches,
+    ...composed.homePatches,
+    ...composed.overlays,
+  ]
+}
+```
+
+</div>
+
+短短 8 行，却是整个装配体系里最需要背下来的一段。四层叠加，**数组顺序就是应用顺序，后写的赢**：
+
+1. **profile bundles（有序）**：`dsh.profile.bundles` 里每个 bundle 的 patch 文件按名单顺序展开。`dsh-base` 永远在最底层，负责把 `agent`、`tools`、`agent-loop` 这些核心行「插入」空树。
+2. **profile 自己的 `cordis.patch.yml`**：你对这个 profile 的私有改装。
+3. **`$DSH_HOME/cordis.patch.yml`**：机器级偏好（比如全机器统一换模型）。它压在单 profile 层之上——机器主人的话比分身的话大。
+4. **`--patch`  overlays（可重复）**：命令行临时实验，最高优先级，重启即消失。
+
+还有一个隐藏角色：同文件 59-64 行的 `PROFILE_ROOT_CONFIG`。profile 根目录的 `cordis.yml` **每次 boot 都被重写为恒等的空数组 `[]`**。为什么？因为 Loader 的树写回机制可能把合成结果「烘焙」进根文件，导致下次启动时每个 bundle 的 insert 被重复执行。把根钉死为空，整棵树就**只能**由 patch 层插入而成——这就是「空根不是 bug 是设计」的全部原因。
+
+</CodeWalk>
+
+<CodeWalk file="packages/bundle/base/cordis.patch.yml" lines="6-28" symbol="dsh-base patch" title="精读 3：一份真实的 patch 层——insert 与整字段覆盖">
+
+<div slot="code">
+
+```yaml
+# A patch replaces the targeted row's whole `config` rather than merging into
+# it, so a row whose value differs by mode does NOT live here: it belongs to
+# each mode bundle, keeping any single row down to one bundle layer plus the
+# user's. Mode-specific rows appear below only with shared plugin identity and
+# neutral defaults; each mode bundle restates its complete configuration.
+#
+# Row order carries no load semantics (activation is service-availability
+# driven); the grouping is for readers.
+
+- insert:
+    - id: timer
+      name: '@deepseek-ai/cordis-plugin-timer'
+
+    - id: hmr
+      name: '@deepseek-ai/cordis-plugin-hmr'
+      config:
+        root: ['.']
+
+    - id: llm
+      name: '@deepseek-ai/dsh-llm'
+
+    - id: session
+      name: '@deepseek-ai/dsh-session'
+```
+
+</div>
+
+这是 `dsh-base` bundle 的真实 patch 文件开头，它教会我们 patch 语法的两件事：
+
+- **`insert` 往空根里「插入」行**。每一行有稳定的 `id`（如 `session`、`agent`），后续层用同一个 `id` 就能精确命中它。整个 agent 脊椎就是 `dsh-base` 这样一行行插出来的。
+- **patch 是整字段覆盖，不是 deep merge**。文件头注释写得明明白白：按 `id` 命中一行后，`config` 是**整个替换**而非递归合并。所以注释里那条架构规则才成立——随模式变化的值不住在 base 层，而是放进各自的 mode bundle 里完整重述，保证任何一行最多被「一个 bundle 层 + 用户层」碰过。
+
+胖虎式直觉「我 patch 里只写一个键，其他键会保留吧？」——不会。少写的键就是没了。这条语义避免了「三层各改一点、最后谁也说不清最终值」的配置悬案。
+
+</CodeWalk>
+
+<CodeWalk file="packages/boot/app-boot/src/index.ts" lines="764-785" symbol="boot" title="精读 4：boot()——把叠好的四层挂上空根">
+
+<div slot="code">
+
+```ts
+  const ctx = new Context()
+  // Two failure labels: `prepare` runs before any config-tree entry mounts,
+  // so its failure is host setup, not the plugin tree.
+  let stage = 'host preparation failed'
+  try {
+    ctx.baseUrl = pathToFileURL(dirname(absoluteConfigPath)).href + '/'
+    ctx.provide('dshHomePath', dshHomePath)
+    await ctx.plugin(Loader)
+    await prepare?.(ctx)
+    stage = 'plugin tree failed to load'
+    await mountRootInclude(ctx, absoluteConfigPath, patches, bareModuleBaseUrl)
+    // A surface can finish and dispose the whole tree while startup is still
+    // in flight, before the last entry settles. The Loader service goes with
+    // it, and the activation audit describes a live tree — reading `ctx.loader`
+    // past this point would throw a TypeError over an app that exited exactly
+    // as asked. Transactional group updates settle
+    // lifecycle inside the mount, so the teardown can land before it returns;
+    // re-check after every await.
+    await ctx.get('loader')?.await()
+    if (ctx.get('loader') === undefined) return ctx
+    await assertEntriesActivated(ctx, binName)
+    return ctx
+```
+
+</div>
+
+叠好的 patch 在这里落地。流程精确得像发射倒计时：
+
+1. `new Context()`——第 1 章的「宇宙大爆炸」。
+2. `ctx.plugin(Loader)`——先挂装载器本身。
+3. `prepare?.(ctx)`——宿主的私活（命令行注入、环境快照），**在任何配置行挂载之前**跑，所以它失败算「host preparation failed」，不算插件树的锅。
+4. `mountRootInclude`——以空根 `cordis.yml` 为锚点挂上 Include，四层 patch 一次性 `applyEntryPatches` 上去。
+5. `loader.await()` 之后还要**再查一次** `ctx.get('loader')`——因为某个界面可能在启动途中就把整棵树 dispose 了（比如 headless 任务瞬间跑完）。注释说得很直白：每个 await 之后都要重新确认世界还在。
+6. `assertEntriesActivated` 做激活审计，然后才把 `ctx` 交出去。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/tools/src/index.ts" lines="1474-1499" symbol="ToolRegistry.prepareExecution" title="精读 5：tools/pre-execute——每次动手前的审批闸门">
+
+<div slot="code">
+
+```ts
+      const carrier = scopeTarget(this, exec.agent)
+      const gate = await this.ctx.waterfall(
+        carrier, 'tools/pre-execute', exec,
+        () => Promise.resolve<PreToolDecision>({ kind: 'allow' }),
+      )
+      const askResolution: ToolAskResolution = gate.kind === 'ask'
+        ? await this.serviceAsk(exec, gate)
+        : { decision: gate, approvalCancelled: false }
+      const { decision } = askResolution
+      if (this.callerCancelled(exec) && askResolution.approvalCancelled) {
+        return await next({ kind: 'post-result', exec, result: toolAbortedBeforeDispatchResult() })
+      }
+      const denialReason = decision.kind === 'allow'
+        ? this.guardReason(exec)
+        : decision.reason
+      if (denialReason !== undefined) {
+        return await next({
+          kind: 'post-result',
+          exec,
+          result: this.materializeFinalResult({
+            content: [{ type: 'text', text: `Error: ${denialReason}` }],
+            isError: true,
+            error: { message: denialReason },
+          }),
+        })
+      }
+```
+
+</div>
+
+模型每调一次工具，都要先过这道 `tools/pre-execute` waterfall（第 1 章讲过的洋葱链在这里第一次露出獠牙）：
+
+- **内建 `next` 是「默认 allow」**。任何一个监听器都可以拦截：返回 `deny` 直接掐死；返回 `ask` 则升级给真人。
+- `PreToolDecision` 是个封闭三态（588-591 行）：`allow` / `deny`（带 reason）/ `ask`（可选 reason）。
+- `ask` 走 `serviceAsk`（1689-1729 行）转给 `ctx.get('approval')`。注意它是 **`ctx.get` 机会式消费**：没挂审批服务的部署，ask 直接降级为 deny——「此工具需要审批（尚不支持）」。
+- 被拒的工具不会消失得无影无踪：拒绝原因被包装成 `Error: ...` 的工具结果**回喂给模型**。模型能读到「用户拒绝了你」，下一轮就会换策略，而不是傻乎乎重试。
+
+这就是「plugins, not loop changes」的实战：审批策略、日志、拦截器全都是挂在 waterfall 上的普通插件，工具调度器自己一行策略都没有。
+
+</CodeWalk>
+
+<CodeWalk file="packages/interaction/user-approval/src/index.ts" lines="305-329" symbol="ApprovalService.decide" title="精读 6：fail-closed——没人接电话时，默认是「不行」">
+
+<div slot="code">
+
+```ts
+    const signal = req.signal
+    if (signal?.aborted) return 'cancelled'
+    // The 'never' policy is decided HERE, before any dispatch: a listener
+    // registered with `prepend: true` after this service mounts would sit
+    // ahead of any gate LISTENER, so a listener-shaped gate cannot keep the
+    // documented promise that 'never' rejects deterministically regardless
+    // of registration order — only the service's own request path can.
+    if (this.effectivePolicy(session) === 'never') return 'rejected'
+    // Enter the promise chain BEFORE dispatching: a listener that throws
+    // SYNCHRONOUSLY (before its first await) must land in the same rejection
+    // path as an async one — `Promise.resolve(call())` would let it escape
+    // the containment into the caller.
+    const answer: Promise<ApprovalOutcome> = Promise.resolve().then(
+      () => this.ctx.waterfall(
+        scopeTarget(this, req.agent), 'approval/request', req,
+        () => Promise.resolve<ApprovalOutcome>('unavailable'),
+      ),
+    ).then(
+      // Normalize a rogue (non-vocabulary) answerer return to the fail-closed
+      // outcome instead of leaking it into callers' closed-union switches.
+      outcome => OUTCOMES.includes(outcome) ? outcome : 'unavailable',
+      // A throwing answerer must fail the QUESTION closed, not the caller's
+      // tool call open — the seam contains its callbacks.
+      () => 'unavailable',
+    )
+```
+
+</div>
+
+审批服务的核心哲学一句话：**这条链上所有意外都收敛到拒绝**。看三个防御层：
+
+- **内建 `next` 返回 `unavailable`**——没有任何 answerer（比如纯自动化环境没挂 UI 审批插件）时，结果是「无审批通道」，`serviceAsk` 把它映射成 deny。危险操作默认被拦，这叫 fail-closed。
+- **answerer 抛异常 → `unavailable`**。注释很传神：「answerer 出错必须让这个问题关闭，而不是让调用方的工具调用悬着」。审批者崩溃绝不能变成放行。
+- **answerer 返回词汇表外的野值 → 归一化为 `unavailable`**。连「回答得不像话」都被视为没回答。
+
+别忘了留痕：`request()`（257-276 行）在派发前后各写一条会话事件——`approval/asked`（谁问的、问什么）与 `approval/decided`（id + 结果）。这正是第 4 章「记忆铁律」的延伸：**凡影响模型可见行为的事，必须能从会话日志重建**。而且 request 要求必须在打开的 turn 内调用，否则直接抛错——游离在 turn 之外的审计事件在崩溃恢复时是垃圾数据。
+
+至于 `danger-full-access` 这类权限 preset（`packages/interaction/permission-presets`）：它把 `sandbox/mode: danger-full-access` 与 `approval/policy: never` 打包成一个用户可选项——适合容器里跑一次性任务、CI 无人值守的场景；日常办公请老实待在 `workspace-write + ask`。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="一次 ask 决策的完整旅程" caption="从工具闸门到真人回答，每一步失败都收敛到 deny">
+  sequenceDiagram
+    participant M as 模型（tool call）
+    participant T as ToolRegistry
+    participant G as tools/pre-execute 监听器
+    participant A as ApprovalService
+    participant U as answerer（UI / 自动策略）
+    M->>T: 调用 bash（危险命令）
+    T->>G: waterfall(tools/pre-execute, exec)
+    G-->>T: 返回 ask
+    T->>A: approval.request(agent, toolName, ...)
+    A->>A: 写入 approval/asked 事件
+    A->>U: waterfall(approval/request, req)
+    alt 用户批准
+      U-->>A: allowed-once
+    else 无 answerer / 抛错 / 野值
+      U-->>A: unavailable（fail-closed）
+    end
+    A->>A: 写入 approval/decided 事件
+    A-->>T: outcome
+    T-->>M: 放行执行，或回喂 Error: 拒绝原因
+</MermaidDiagram>
+
+## 动手实验
+
+在仓库根目录验证本章结论（需要 `DEEPSEEK_API_KEY` 的实验已标注）：
+
+1. **看穿四层叠加**：`pnpm dsh --profile headless --dump-config`，输出的每行插件都能回答「它从哪一层来」。再用 `--dump-default-config` 对比——后者剥掉用户层和 `--patch`，只剩 bundle 层的「出厂状态」。
+2. **验证 patch 是整字段覆盖**：写一个 `/tmp/my.patch.yml`，只给某行的 `config` 写一个键，`pnpm dsh --profile headless --patch /tmp/my.patch.yml --dump-config`，观察该行 config 里其他键**全部消失**——不是合并，是替换。
+3. **验证空根铁律**（需 key）：打开 `$DSH_HOME/profiles/headless/cordis.yml` 手改内容，再跑一次 `pnpm dsh --profile headless "say hi"`，回头再看——文件已被重置为 `[]`。根不属于你，patch 层才是你的画布。
+4. **观察审批留痕**（需 key）：在 CLI profile 里触发一次需要确认的工具调用，批准后去会话日志里搜 `approval/asked` 与 `approval/decided`——两个事件共享同一个请求 id，成对出现。
+
+## 胖虎翻车现场
+
+> 胖虎：「我在 cordis.patch.yml 里给 hmr 的 config 加了个键，结果热重载整个挂了——我不就加了一行吗？！」
+
+加了「一行」= 替换**整个** config。原来的 `root: ['.']` 被你的单行 config 顶掉了，hmr 拿不到 root 自然炸。patch 的语义是「整字段覆盖」，想改一个键，请把这行的**完整 config** 抄过来再改。这也是为什么 base bundle 的注释要求「任何一行最多被一个 bundle 层碰过」——层数越少，最终值越可追溯。
+
+> 胖虎（again）：「我把审批插件从 patch 里 disabled 了，心想模型总算能放开手脚干活，结果所有危险命令全被拒了！」
+
+这正是 fail-closed 在保护你。没了 answerer，`approval/request` 落到内建 `unavailable`，`serviceAsk` 一律映射成 deny。想真正放开手脚，正确姿势是权限 preset：切到 `danger-full-access`（沙箱不限制 + 审批策略 `never`），而不是拆闸门——拆掉的闸门会以「全部拒绝」的方式继续站岗。
+
+## 小结卡
+
+- profile 是**有序的 bundle 名单**；根 `cordis.yml` 恒为空数组，整棵树由 patch 层 insert 而成。
+- 四层叠加顺序：bundles → profile patch → `$DSH_HOME` patch → `--patch`；数组顺序即应用顺序，**整字段覆盖**，后写的赢。
+- 工具执行前必过 `tools/pre-execute` waterfall：`allow` / `deny` / `ask` 三态，ask 升级给 `ctx.approval.request`。
+- 审批链 fail-closed：无 answerer、answerer 抛错、返回野值，全部收敛到 `unavailable` → deny；`approval/asked` 与 `approval/decided` 成对留痕。
+- 想放开权限用 preset（如 `danger-full-access`），别拆审批插件。
+- 下一章：agent 学会了分身——`ctx.subagents` 注册表、maxDepth 铁律，以及 spawn/fork/acp 三个平行世界。
+
+</Chapter>

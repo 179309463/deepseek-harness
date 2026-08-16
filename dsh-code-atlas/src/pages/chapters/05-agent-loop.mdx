@@ -1,0 +1,409 @@
+---
+---
+import Chapter from '../../layouts/Chapter.astro';
+import StoryStrip from '../../components/StoryStrip.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+import CodeWalk from '../../components/CodeWalk.astro';
+
+<Chapter
+  num="05"
+  title="循环内部"
+  subtitle="ReactLoopAgent 的 turn / step / inbox 编排——从按下回车，到模型调完最后一个工具收工，一次任务的完整生命周期"
+  prev={{ slug: '04-session-memory', title: '04 记忆真相' }}
+  next={{ slug: '06-layers-approval', title: '06 分层与审批' }}
+>
+
+<StoryStrip panels={[
+  { who: 'nobita', text: '看完上一章我懂了：日志是真相。但新的问题来了——谁在读我的输入？谁在决定什么时候问模型、什么时候调工具、什么时候收工？' },
+  { who: 'doraemon', text: '一个不到五百行的类：ReactLoopAgent。它的工作方式像餐厅后厨——turn 是一桌客人，step 是上一轮菜，inbox 是订单夹。' },
+  { who: 'nobita', text: '那我中途插嘴「别放香菜」算什么？' },
+  { who: 'doraemon', text: '一张加急订单，塞进 next-step 队列，下一道菜的间隙就被领走。而且所有插队都落盘——连「插过队」这件事都是历史的一部分。' },
+]} />
+
+## 本章源码地图
+
+<MermaidDiagram title="Agent 循环三方关系图" caption="Inbox 管排队，Session 管记忆，ReactLoopAgent 管节奏">
+  flowchart TB
+    subgraph AGENT["packages/core/agent（能力定义）"]
+      IFACE["runtime-types.ts<br/>Agent 接口 + 扩展点事件"]
+      INBOX["inbox.ts<br/>双队列 + 落盘 splice"]
+      DISP["dispatch.ts<br/>fused 事件派发器"]
+    end
+    subgraph LOOP["packages/core/agent-loop（实现）"]
+      RLA["agent.ts<br/>ReactLoopAgent：turn / step / buildRequest"]
+      TC["tool-calls.ts<br/>一步之内的工具编排"]
+      INV["invariant.ts<br/>请求可重建校验"]
+    end
+    SESSION["dsh-session<br/>append-only 日志 + surface"]
+    RLA --> INBOX
+    RLA --> DISP
+    RLA --> SESSION
+    RLA --> TC
+    DISP --> IFACE
+</MermaidDiagram>
+
+| 文件 | 行数 | 本章要回答的问题 |
+|---|---|---|
+| `packages/core/agent-loop/src/agent.ts` | 496 | 一个 turn 从生到死经过哪几站？ |
+| `packages/core/agent/src/runtime-types.ts` | 292 | 插件能在哪些点插手循环？用什么模式插手？ |
+| `packages/core/agent/src/inbox.ts` | 220 | 中途插嘴的消息怎么排队、怎么落盘？ |
+| `packages/core/agent/src/dispatch.ts` | 176 | emit / serial / waterfall 三种派发有何分工？ |
+| `packages/core/agent-loop/src/tool-calls.ts` | 289 | 一步里多个工具调用怎么排兵布阵？ |
+
+## 源码深潜
+
+<CodeWalk file="packages/core/agent/src/runtime-types.ts" lines="219-244" symbol="agent/pre-step · agent/request" title="精读 1：循环不是黑盒——每一步都有盖了章的插手点">
+
+<div slot="code">
+
+```ts
+    // ---- the machine's extension points ----
+    /**
+     * Reject a proposed step or replace the messages that enter it. Calling
+     * `next()` preserves the current messages.
+     * @param payload.agent - the agent proposing the step.
+     * @param payload.messages - messages removed from the inbox for this step.
+     * @param payload.turn - the turn that will own the step.
+     * @param payload.step - the step proposed by the loop.
+     * @param payload.signal - the current turn's cancellation signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
+    /**
+     * Replace the frozen call configuration. `await next()` yields the config
+     * the machine would use (agent options on the first request, the logged
+     * header afterwards); return a replacement to switch. Model-visible
+     * content must use logged channels; this waterfall cannot mutate messages.
+     * @param payload.agent - the agent making the model call.
+     * @param payload.turn - the open turn number.
+     * @param payload.step - the step whose request this is.
+     * @param payload.signal - the current turn's explicit abort signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+    */
+    'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
+```
+
+</div>
+
+dsh 的哲学是「插件，而不是改循环」，所以循环把每个决策点都开成了带 `@mode` 标注的类型化事件。注意 JSDoc 里的 `@mode waterfall`——这不是装饰，是契约：
+
+- `agent/pre-step`（waterfall）：step 进门前的安检。监听器可以**否决这一步**（返回 reject），也可以**换掉进门的消息**。compaction 插件就挂在这里做压力检测——上下文太挤就先瘦身再放行。
+- `agent/request`（waterfall）：替换本次调用的 frozen 配置（provider、model、temperature……）。注释里那句警告值得背下来：**这个 waterfall 不能改 messages**——想改模型可见内容，必须走落盘的通道（比如 inbox 注入）。为什么？上一章的铁律：改了就重建不出来，invariant 当场 fail。
+- 同文件里还有 `agent/turn-stopping`（serial，278 行）和 `agent/request-error`（waterfall，260 行），下文都会登场。
+
+事件图用 declaration merging 合并进 Cordis 的 `Events` 接口，加事件不改框架——这就是「merge-extensible」的活样本。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/agent/src/inbox.ts" lines="62-78" symbol="Inbox.claim" title="精读 2：Inbox 双队列——插队的艺术，且每笔都记账">
+
+<div slot="code">
+
+```ts
+
+  /**
+   * Remove and return the complete batch proposed for one step, publishing
+   * each claimed message. The durable splices are pure deletions.
+   * @param target - whether this boundary also consumes one queued turn.
+   * @param turn - turn that will own the claimed batch.
+   * @returns next-step input followed by the queued turn, when requested.
+   * @internal - The agent loop's step-boundary operation, not a plugin extension point.
+   */
+  claim(target: InboxTarget, turn: number): UserMessage[] {
+    const claimed = this.mutate('next-step', 0, this.nextStep.length, [], false)
+    if (target === 'next-turn') {
+      claimed.push(...this.mutate('next-turn', 0, 1, [], false))
+    }
+    for (const message of claimed) this.notifications.claimed(message, turn)
+    return claimed
+  }
+```
+
+</div>
+
+Inbox 是两条待办队列：`next-turn`（每人独占一轮的正式提问，由 `followup` 排入）和 `next-step`（同 turn 内的插话：`steer` 的方向修正、`inject` 的静默上下文、工具回传的附加上下文）。
+
+`claim` 的语义藏在顺序里：**先掏空 next-step，再在 turn 首步额外带走一条 next-turn**。所以一个 turn 的第一步 = 插队消息 + 本轮正式提问，后续步骤只吃 next-step。
+
+更妙的是它的落盘方式：每次变更都是一条 `agent/inbox/spliced` 事件（`mutate` 内部 append，声明合并自 `dsh-agent/types`）。而且**durable 事件先提交、live 投影后变更**——同步观察者看到的是 splice 之前的队列，可以从坐标重建被移除的消息。重启时 Inbox 构造函数（32–39 行）回放全部 splice 事件，队列原样复活。连「你插过队」都是历史。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/agent-loop/src/agent.ts" lines="262-301" symbol="ReactLoopAgent.turn" title="精读 3：turn——一个回合的完整生死簿">
+
+<div slot="code">
+
+```ts
+    try {
+      while (true) {
+        signal.throwIfAborted()
+        const step = phase.step + 1
+        const decision = await this.preStep(target, { turn, step })
+        if (decision.kind === 'reject') {
+          turnEnds = { kind: 'blocked' }
+          return false
+        }
+        if (turnEnds && decision.messages.length === 0) break
+        // A removed waking message or an enter decision rewritten to empty
+        // still owns the initial turn boundary, but it spends no model call.
+        if (phase.step === 0 && decision.messages.length === 0) {
+          turnEnds = { kind: 'completed' }
+          return false
+        }
+        signal.throwIfAborted()
+        this.session.append('step/start', { turn, step })
+        phase.step = step
+        try {
+          for (const message of decision.messages) {
+            this.session.append('user/message', message, { surfaceOp: 'append' })
+          }
+          // max-tokens is sticky: once any step hits the ceiling, later steps
+          // that complete normally must not downgrade the turn outcome.
+          const stepEnd = await this.step(decision.assembly)
+          // max-tokens stays sticky: a later completed step must not
+          // downgrade the turn outcome.
+          if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
+        } finally {
+          this.session.append('step/end', { turn, step })
+        }
+        signal.throwIfAborted()
+        if (turnEnds && this.inbox.nextStep.length === 0) {
+          await this.dispatch.serial('agent/turn-stopping', { turn, signal })
+          signal.throwIfAborted()
+        }
+        if (turnEnds && this.inbox.nextStep.length === 0) break
+        target = 'next-step'
+      }
+```
+
+</div>
+
+这就是整个 agent 的主动脉，每一行都在回答「什么时候干什么」：
+
+- **先 preStep 后落边界**：claim 队列 → 组装系统提示 → 过 `agent/pre-step` waterfall。被 reject 则整个 turn 以 `blocked` 收场，**一个模型调用都不花**。
+- **空 turn 合法**：消息被抢光或改写成空，turn 照样有 `turn/start` + `turn/end`，只是没有 step——边界即历史。
+- **进门消息先落盘**：每条进门消息 append 为 `user/message` 且 `surfaceOp: 'append'`——先进历史，再见模型。顺序即铁律。
+- **max-tokens 是粘性的**：任何一步顶到 token 上限，后续步骤正常完成也不能把结局降级回去。
+- **step/end 在 finally 里**：step 无论成败都有收尾，日志永远成对。
+- **turn-stopping 用 serial 而非 waterfall**：它不是「可不可以停」的否决链，而是「还有活儿吗」的意见征询——监听器想加班就 `agent.steer()` 往 next-step 塞消息，循环随后**重读队列**决定是否真的收工。数据说话，监听器顺序影响不了结局。
+
+注意 turn 函数末尾（324–329 行）：收工后若队列还有 pending，立刻换新的 AbortController 开下一个 turn——一次 wake 驱动连续多轮。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/agent-loop/src/agent.ts" lines="339-400" symbol="ReactLoopAgent.step" title="精读 4：step——一次模型调用的台前幕后">
+
+<div slot="code">
+
+```ts
+    while (true) {
+      const { request, preparedCall } = await this.buildRequest(
+        turn, step, assembly.tools, system, this.session.deriveMessages(), signal,
+      )
+      const assembler = new BlockAssembler()
+      const chunkSeqs: number[] = []
+      const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)
+      signal.throwIfAborted()
+      for await (const chunk of stream) {
+        signal.throwIfAborted()
+        chunkSeqs.push(this.session.append('assistant/chunk', { turn, step, chunk }).seq)
+        assembler.push(chunk)
+      }
+      signal.throwIfAborted()
+      const finish = assembler.finish
+      if (finish.kind === 'error' || finish.kind === 'aborted') {
+        const action = await this.dispatch.waterfall(
+          'agent/request-error', {
+            turn,
+            step,
+            provider: request.provider,
+            failure: finish.failure,
+            retryPolicy: preparedCall?.retryPolicy,
+            signal,
+          },
+          () => Promise.resolve<RequestErrorAction>(undefined),
+        )
+        signal.throwIfAborted()
+        if (action?.kind !== 'retry') {
+          throw new LlmError(finish.failure.message, finish.failure.code, finish.failure)
+        }
+        continue
+      }
+
+      const message = createAssistantMessage({
+        content: assembler.blocks(),
+        source: {
+          provider: request.provider,
+          model: request.model,
+          ...assembler.replayState !== undefined ? { replayState: assembler.replayState } : {},
+        },
+      })
+      this.session.append(
+        'assistant/message',
+        {
+          turn,
+          step,
+          message,
+          ...assembler.usage === undefined ? {} : { usage: assembler.usage },
+        },
+        { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
+      )
+      if (finish.kind === 'max-tokens') return { kind: 'max-tokens' }
+
+      const toolCalls = message.content.filter(block => block.type === 'tool-call')
+      if (toolCalls.length === 0) return { kind: 'completed' }
+      const { concluded } = await executeToolCalls(
+        this.loopCtx, turn, step, toolCalls, signal,
+        context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
+      )
+      return concluded ? { kind: 'completed' } : null
+    }
+```
+
+</div>
+
+一步之内的四幕剧：
+
+1. **buildRequest**（407–495 行）：`deriveMessages()` 现场折叠历史 → 过 `agent/request` waterfall 定配置 → 把完整请求头 append 为 `request/header`（首步 `initial`，配置变了 `change`）→ deepFreeze 整个请求。请求一冻结，上一章的 invariant 就有了对答案的底气。
+2. **流式落盘**：每个 chunk 立即 append 为 `assistant/chunk` 并记下 seq——token 级回放保真，但它们不进 surface。
+3. **组装与上台**：流结束后 append 一条 `assistant/message` 进 surface，`sourceEventSeqs` 引回全部 chunk——模型可见的是组装品，回放保真靠原材料，两者用 seq 链在一起。usage 记账也挂在同一条事件上。
+4. **工具分派**：没有工具调用就 `completed` 收工；有则交给 `executeToolCalls`。工具产出的上下文通过回调塞进 next-step 队列——不直接进历史，等下一个 step 边界由 claim 正规领进门。
+
+返回值 `null` 的意思是「这步完了但 turn 没结论」——控制权交回 turn 循环，由它决定再来一步还是收工。失败路径（354–370 行）走 `agent/request-error` waterfall，监听器返回 `{ kind: 'retry' }` 就原地重试，否则抛 `LlmError` 终结本步。
+
+</CodeWalk>
+
+<CodeWalk file="packages/core/agent-loop/src/tool-calls.ts" lines="59-101" symbol="executeToolCalls" title="精读 5：一步之内的工具排兵布阵">
+
+<div slot="code">
+
+```ts
+export async function executeToolCalls(
+  ctx: Context,
+  turn: number,
+  step: number,
+  toolCalls: ToolCallBlock[],
+  signal: AbortSignal,
+  acceptContext: (context: UserMessage) => void,
+): Promise<{ concluded: boolean }> {
+  const agent = ctx.agents.requireInitiator()
+  const { session } = agent
+
+  // Inputs are distinct because tools/execute wrappers may replace `exec.signal`.
+  const planned: PlannedCall[] = toolCalls.map(block => ({
+    block,
+    exec: {
+      callId: block.id,
+      name: block.name,
+      arguments: parseArguments(block.arguments),
+      agent,
+      signal,
+    },
+  }))
+
+  let next = 0
+  let concluded = false
+  while (next < planned.length) {
+    // Commit before classifying again so registry changes affect unstarted calls.
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded by the loop condition
+    const first = planned[next]!
+    const mode = ctx.tools.executionMode(first.exec).kind
+    const group = mode === 'parallel' ? planned.slice(next) : [first]
+    const outcome = await runGroup(
+      ctx, turn, step, group, mode, signal, acceptContext,
+    )
+    next += outcome.consumed
+    concluded ||= outcome.concluded
+    if (outcome.aborted) {
+      for (const call of planned.slice(next)) appendSkippedToolCall(session, turn, step, call.block)
+      return { concluded }
+    }
+  }
+  return { concluded }
+}
+```
+
+</div>
+
+模型一步可能甩出一串工具调用，这里的调度规则：
+
+- **exclusive 是路障**：标记为独占的调用单独成组，前后的并行池都为它停下——写文件和读目录当然不能真并发。
+- **parallel 用滚动池**：并行组切片执行，结果与上下文始终**按模型给出的顺序**提交——调度可以乱序，落盘不能乱序。
+- **每次循环重新分类**：注册表可能在运行中变化，未启动的调用按最新分类执行。
+- **abort 讲武德**：已启动的 drain 并提交结果，**未启动的也要补一条合成错误结果**（`appendSkippedToolCall`）——provider 拒绝悬空 call，回放也要求每个 call 有 result 配对。
+- `concludesTurn` 是工具层的「散会」按钮：结果里带它，本步直接 `completed`，不必等模型再表态。
+
+每个调用先落 `tool/call`（留档配对、不进 surface），执行完落 `tool/result`（进 surface 并回链 call seq）——上一章的三类 surface 在这里接上了头。
+
+</CodeWalk>
+
+## 运行机制图
+
+<MermaidDiagram title="一个 turn 的完整时序（含一次工具调用）" caption="本章核心图：横向是时间，每条 Session 事件都是落盘的事实">
+  sequenceDiagram
+    participant U as 用户
+    participant A as ReactLoopAgent
+    participant I as Inbox
+    participant S as Session 日志
+    participant L as LLM
+    participant T as 工具管线
+    U->>A: followup（提问）
+    A->>I: splice 入 next-turn
+    I->>S: agent/inbox/spliced
+    A->>S: turn/start
+    A->>I: claim（领走提问）
+    I->>S: agent/inbox/spliced（删除）
+    A->>A: agent/pre-step（waterfall）
+    A->>S: step/start
+    A->>S: user/message（surface append）
+    A->>S: request/header
+    A->>L: llm/stream（invariant 校验通过）
+    L-->>A: assistant/chunk 流
+    A->>S: assistant/chunk 逐块落盘
+    A->>S: assistant/message（surface append）
+    A->>S: tool/call（留档不进 surface）
+    A->>T: tools/pre-execute → tools/execute
+    T-->>A: ToolExecutionResult
+    A->>S: tool/result（surface append）
+    A->>S: step/end
+    A->>A: agent/turn-stopping（serial 征询）
+    A->>S: turn/end（completed）
+</MermaidDiagram>
+
+<MermaidDiagram title="Inbox 双队列流向图" caption="followup 占一整轮；steer 抢下一步；inject 安静排队">
+  flowchart LR
+    F["followup()"] --> NT["next-turn 队列"]
+    ST["steer()"] --> NS["next-step 队列"]
+    INJ["inject()"] --> NS
+    TOOLCTX["工具附加上下文"] --> NS
+    NS -->|"claim：每个 step 边界掏空"| STEP["进入下一步的消息"]
+    NT -->|"claim：仅 turn 首步带走一条"| STEP
+    STEP --> APPEND["user/message（surface append）"]
+</MermaidDiagram>
+
+## 动手实验
+
+1. **跟踪一次完整 turn**（需要 `DEEPSEEK_API_KEY`）：跑 `pnpm dsh --profile headless "用 bash 工具查看当前目录，然后总结"`，照着上面的时序图在持久化日志里逐一勾掉事件——11 类事件一个不少。
+2. **验证 turn-stopping 是数据驱动**（需要 key）：写个插件挂 `ctx.on('agent/turn-stopping', ({ agent }) => { if (没干够) agent.steer(再来一条) })`，观察 agent 收工前被你的监听器「加班」了一个 step；然后改成 return 一个值试试——serial 模式下返回值什么也改变不了。
+3. **无 key 看编排**：`pnpm run test:snapshot` 回放真实录制的事件流，是观察 turn/step 边界与落盘顺序的免费材料。
+4. **看 claim 的顺序**：连续 `steer` 两条再 `followup` 一条，日志里会先出现 next-step 的 splice，再出现 next-turn 的——精读 2 的顺序承诺可以直接对账。
+
+## 胖虎翻车现场
+
+> 胖虎：「我想阻止 agent 收工，给 `agent/turn-stopping` 写了个监听器，死活不调 `next()`——结果报错了！waterfall 的规矩不是『不调 next 就是否决』吗？」
+
+翻车点恰恰在这里：`agent/turn-stopping` 是 **serial**，不是 waterfall——参数列表里根本没有 `next` 给你调。serial 是「挨个发言」的征询，不是「层层把关」的审批。
+
+想留住 turn，正确姿势是在监听器里 `agent.steer(...)` 往 next-step 塞一条消息：循环在 serial 征询后**重读队列**，发现新活儿自然再开一个 step。设计意图写在 JSDoc 里：「Data decides, so listener order cannot change the outcome.」——决定权交给数据，监听器顺序才无法暗箱操作结局。胖虎想靠「卡住链条」耍赖，而这套机器根本不吃流程绑架。
+
+## 小结卡
+
+- 一个 turn 的序列：`turn/start` → claim → `agent/pre-step`（waterfall）→ `step/start` → `user/message` 落盘 → `request/header` → `llm/stream` → chunk 流 → `assistant/message` → 工具编排 → `step/end` → `agent/turn-stopping`（serial）→ `turn/end`。
+- Inbox 双队列：`next-turn` 每人一轮，`next-step` 同轮插话；claim 先掏空 next-step；每次变更落盘为 `agent/inbox/spliced`，重启回放复活。
+- `tool/call` 留档不进 surface，`tool/result` 进 surface 并回链 call；abort 也要给未启动的调用补合成结果。
+- 扩展点按模式分工：waterfall 管「把关与替换」（pre-step / request / request-error），serial 管「征询与表态」（turn-stopping），emit 管「通知」（status / inbox / error）。
+- 下一章：工具真要动手前的最后一道岗——分层权限与审批链。
+
+</Chapter>

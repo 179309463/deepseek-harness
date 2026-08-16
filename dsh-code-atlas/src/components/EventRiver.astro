@@ -1,0 +1,60 @@
+---
+interface RiverEvent {
+  type: string;
+  note: string;
+  surface?: boolean;
+}
+
+interface Props {
+  events: RiverEvent[];
+  title?: string;
+}
+
+const { events, title = 'SessionEvent 时间之河' } = Astro.props;
+---
+
+<div class="comic-card my-8 overflow-hidden">
+  <div class="border-b border-[#e4eef6] bg-mist/80 px-5 py-3">
+    <div class="flex items-center gap-2 font-bold text-dora-deep">
+      <span class="inline-block h-3 w-3 shrink-0 rounded-full border border-[#b7d0e6] bg-dora"></span>
+      {title}
+    </div>
+    <div class="mt-1 pl-5 text-xs text-ink/50">自上而下 = 时间流逝 · 蓝底序号 / surface 标签 = 进模型可见历史</div>
+  </div>
+
+  <ol class="event-river-list relative m-0 list-none px-5 py-4">
+    <span class="pointer-events-none absolute top-8 bottom-8 left-[2.25rem] w-[3px] -translate-x-1/2 bg-dora/35" aria-hidden="true"></span>
+    {events.map((e, i) => (
+      <li class="relative m-0 grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-2 sm:grid-cols-[2.25rem_13rem_minmax(0,1fr)_auto]">
+        <span
+          class:list={[
+            'relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#d5e3f0] text-[11px] font-extrabold leading-none',
+            e.surface ? 'bg-dora' : 'bg-card text-ink',
+          ]}
+          style={e.surface ? 'color:#fff;-webkit-text-fill-color:#fff' : undefined}
+        >
+          {String(i + 1).padStart(2, '0')}
+        </span>
+        <span class="font-mono text-xs font-bold text-dora-deep sm:truncate">{e.type}</span>
+        <span class="col-span-2 text-sm text-ink/80 sm:col-span-1">{e.note}</span>
+        {e.surface ? (
+          <span class="col-start-2 w-fit rounded bg-dora px-1.5 py-0.5 text-[10px] font-bold sm:col-start-auto" style="color:#fff;-webkit-text-fill-color:#fff">surface</span>
+        ) : (
+          <span class="hidden sm:block"></span>
+        )}
+      </li>
+    ))}
+  </ol>
+</div>
+
+<style>
+  /* 压过 .prose-atlas ol/li（未分层，比 Tailwind utilities 更硬） */
+  .event-river-list {
+    list-style: none;
+    margin: 0;
+    padding: 1rem 1.25rem;
+  }
+  .event-river-list > li {
+    margin: 0;
+  }
+</style>

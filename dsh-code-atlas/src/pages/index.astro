@@ -1,0 +1,79 @@
+---
+import Base from '../layouts/Base.astro';
+import MermaidDiagram from '../components/MermaidDiagram.astro';
+
+const chapters = [
+  { slug: '01-plugin-universe', num: '01', title: '插件宇宙观', desc: 'Context、Fiber、effect/dispose、事件总线：一切皆插件的世界如何运转', files: 'vendor/cordis/src/*' },
+  { slug: '02-loader', num: '02', title: '装载与卸载', desc: 'Loader、Entry/Group、依赖顺序、isolate realm：配置如何长成插件树', files: 'vendor/loader/src/*' },
+  { slug: '03-capability-seam', num: '03', title: '接口学', desc: 'Service Definition / Provider / Consumer 三角完整解剖，以 shell 为样板', files: 'packages/shell/*' },
+  { slug: '04-session-memory', num: '04', title: '记忆真相', desc: 'SessionEvent 只增不改、surface 折叠、model-visible ⟺ logged 铁律', files: 'packages/core/session/*' },
+  { slug: '05-agent-loop', num: '05', title: '循环内部', desc: 'ReactLoopAgent 的 turn/step/inbox 编排与 waterfall 事件图', files: 'packages/core/agent-loop/*' },
+  { slug: '06-layers-approval', num: '06', title: '分层与审批', desc: 'profile/bundle/patch 四层叠加；tools/pre-execute 与 fail-closed 审批', files: 'packages/boot/* · interaction/*' },
+  { slug: '07-subagent', num: '07', title: '分身术', desc: 'SubagentRuntime、maxDepth 铁律、spawn/fork/acp 三种 Provider', files: 'packages/subagent/*' },
+  { slug: '08-self-mod-compaction', num: '08', title: '自改装与瘦身', desc: 'cordis_inspect/define/run 运行时改自己；compaction 引擎', files: 'packages/extensions/* · compaction/*' },
+  { slug: '09-production', num: '09', title: '走向生产', desc: 'ACP/JSON-RPC 协议层、快照测试与仓库 gates 工程纪律', files: 'packages/acp · sdk · scripts/' },
+];
+---
+
+<Base title="首页">
+  <section class="comic-card mb-10 overflow-hidden">
+    <div class="border-b border-white/20 bg-gradient-to-br from-dora to-dora-deep px-6 py-10 text-white md:px-10">
+      <p class="text-sm font-bold tracking-widest opacity-80">DEEPSEEK-HARNESS SOURCE CODE ATLAS</p>
+      <h1 class="mt-2 text-3xl font-extrabold leading-tight md:text-4xl">哆啦A梦带队，钻进 dsh 的源码里</h1>
+      <p class="mt-4 max-w-2xl text-white/90">
+        这不是又一份「README 翻译」。每一章都从一段深夜检修的故事开场，用 UML 图建立全局，
+        然后逐段精读 <strong>仓库里的真实代码</strong>（含文件路径与行号锚点），最后给你一个能亲手跑起来的实验。
+        读完 9 章，你就真的吃透了这个插件式 agent harness。
+      </p>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href="/chapters/01-plugin-universe" class="on-accent rounded-xl px-5 py-2 font-bold transition hover:-translate-y-0.5">从第 1 章开始 →</a>
+        <a href="/appendix/symbols" class="rounded-xl border border-white/40 px-5 py-2 font-bold text-white transition hover:bg-white/10">查符号索引</a>
+      </div>
+    </div>
+    <div class="grid gap-4 bg-card px-6 py-5 text-sm md:grid-cols-3 md:px-10">
+      <div><strong class="text-dora-deep">真实代码</strong><br />每个论点都锚定文件:行号</div>
+      <div><strong class="text-dora-deep">UML 可视化</strong><br />架构 / 时序 / 活动 / 用例图</div>
+      <div><strong class="text-dora-deep">动手实验</strong><br />可复制的命令与观察点</div>
+    </div>
+  </section>
+
+  <h2 class="section-title mb-4 text-2xl font-extrabold">全站源码地图</h2>
+  <MermaidDiagram title="dsh 架构分层与章节对照" caption="从下往上读：Cordis 内核是地基，能力 seam 是装备，协议层是对外的桥">
+    flowchart TB
+      subgraph L3["协议与装配层（第 6、9 章）"]
+        ACP["packages/acp"]
+        SDK["packages/sdk"]
+        BOOT["packages/boot/app-boot"]
+      end
+      subgraph L2["能力层（第 3、7、8 章）"]
+        SHELL["shell seam"]
+        SUB["subagent seam"]
+        COMP["compaction"]
+        EXT["extensions/tool-cordis"]
+      end
+      subgraph L1["产品脊柱（第 4、5 章）"]
+        LOOP["core/agent-loop"]
+        SESS["core/session"]
+        TOOLS["core/tools"]
+      end
+      subgraph L0["Cordis 内核（第 1、2 章）"]
+        CTX["vendor/cordis"]
+        LOAD["vendor/loader"]
+      end
+      L3 --> L2 --> L1 --> L0
+  </MermaidDiagram>
+
+  <h2 class="section-title mb-4 mt-12 text-2xl font-extrabold">九章之旅</h2>
+  <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+    {chapters.map((c) => (
+      <a href={`/chapters/${c.slug}`} class="comic-card comic-card-hover block p-5">
+        <div class="flex items-center gap-3">
+          <span class="flex h-10 w-10 items-center justify-center rounded-full border border-[#b7d0e6] bg-dora font-extrabold text-white">{c.num}</span>
+          <h3 class="text-lg font-extrabold text-dora-deep">{c.title}</h3>
+        </div>
+        <p class="mt-3 text-sm text-ink/80">{c.desc}</p>
+        <p class="mt-3 font-mono text-xs text-ink/45">{c.files}</p>
+      </a>
+    ))}
+  </div>
+</Base>

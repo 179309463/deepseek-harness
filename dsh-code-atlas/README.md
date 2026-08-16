@@ -1,0 +1,34 @@
+# DSH 源码图鉴（dsh-code-atlas）
+
+「哆啦A梦带队读源码」—— deepseek-harness 仓库的深度源码分析静态网站。Astro 5 + MDX + Tailwind v4 + Mermaid，亮白模式，纯静态输出。
+
+## 本地开发
+
+```sh
+pnpm install
+pnpm dev      # 开发预览
+pnpm build    # 输出静态站到 dist/
+pnpm preview  # 本地预览构建产物
+```
+
+## 目录
+
+```
+research/          源码研究笔记（写作素材，不参与构建）
+src/pages/         页面（index + chapters/0X-*.mdx + appendix/*）
+src/components/    CodeWalk / MermaidDiagram / StoryStrip / EventRiver / SourceRef
+src/layouts/       Base（站点骨架）/ Chapter（章节骨架）
+```
+
+## 部署到 Railway
+
+1. Railway 新建项目，选择本仓库，将 **Root Directory** 设为 `dsh-code-atlas`。
+2. `railway.toml` 已配置 nixpacks：`pnpm install --frozen-lockfile && pnpm build`，启动 `pnpm start`（serve 托管 `dist/`）。
+3. Node 版本要求 `^22.19 || >=24`（nixpacks 会读取 `package.json` 的 `engines`）。
+
+## 写作约定
+
+- 每个代码论点必须带 `CodeWalk`（文件路径 + 行号 + 真实代码片段）。
+- UML 一律用 `MermaidDiagram`，禁止外链图片。
+- 章节骨架：漫画条开场 → 源码地图 → CodeWalk 精读 → 运行机制图 → 动手实验 → 胖虎翻车现场 → 小结卡。
+- 全站亮白模式，不要引入暗色主题。

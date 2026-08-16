@@ -1,0 +1,87 @@
+---
+---
+import Base from '../../layouts/Base.astro';
+import AppendixNav from '../../components/AppendixNav.astro';
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+
+<Base title="附录 · 事件图谱">
+  <AppendixNav current="events" />
+
+  <div class="prose-atlas">
+    <h1 class="section-title text-2xl font-extrabold">附录 · 事件图谱</h1>
+
+    <p>dsh 里有两套「事件」：<strong>Session 事件</strong>写进 append-only 日志（durable，可重放重建），<strong>Cordis 事件</strong>是进程内的活调用（emit / serial / waterfall 等模式，不落盘）。本页先给出 SessionEventMap 的全景分类，再用两张表分别列出两类事件。</p>
+
+    <MermaidDiagram title="Session 事件七族分类" caption="只有 message 族的三类进入 surface（模型可见历史）；其余都是 log-only">
+      flowchart TB
+        SESS["SessionEventMap（append-only 日志）"]
+        SESS --> TURN["turn 族<br/>turn/start · turn/end"]
+        SESS --> STEP["step 族<br/>step/start · step/end"]
+        SESS --> MSG["message 族（进 surface）<br/>user/message · assistant/message · tool/result"]
+        SESS --> CHUNK["流式族<br/>assistant/chunk"]
+        SESS --> TOOL["tool 族<br/>tool/call · tool/code-dispatch*"]
+        SESS --> INBOX["inbox 族<br/>agent/inbox/spliced"]
+        SESS --> MGMT["治理族<br/>request/header · request/context · todo/write<br/>session/title · session/end-seed · plan/mode"]
+        SESS --> APPR["approval 族<br/>approval/asked · decided · policy"]
+        SESS --> COMP["compaction 族<br/>compaction/start · summary · end · prune"]
+        SESS --> LLM["llm 族<br/>llm/retry · llm/retry-started"]
+        MSG -. "surfaceOp: append / replace" .-> SURF["surface（deriveMessages 的来源）"]
+    </MermaidDiagram>
+
+    <h2>Session 事件（durable，写进日志）</h2>
+
+    <p>核心地图定义于 <code>packages/core/session/src/types.ts</code>（SessionEventMap，236–333 行）；其余由各方包通过 declaration merging 合入。「模式」列指日志写入方式——Session 事件统一是 <code>Session.append</code>，同步进内存日志、再经 <code>session/event</code> 广播给持久化与投影。</p>
+
+    | 事件名 | 模式 | 是否进 surface | 一句话语义 | 定义位置 |
+    |---|---|---|---|---|
+    | `turn/start` | append | 否 | 开启一轮：claim 队列输入之前 | types.ts:243 |
+    | `turn/end` | append | 否 | 关闭一轮，携带 TurnEndReason；不在边界 await flush | types.ts:252 |
+    | `step/start` | append | 否 | 开启一步：一次模型调用 + 它请求的工具执行 | types.ts:254 |
+    | `step/end` | append | 否 | 关闭一步 | types.ts:256 |
+    | `user/message` | append | 是 | 用户角色消息：真人输入 / inject 上下文 / goal 续轮 | types.ts:264 |
+    | `assistant/chunk` | append | 否 | 原始流式分片，token 级重放保真 | types.ts:266 |
+    | `assistant/message` | append | 是 | 一步的组装后助手消息，携带 usage | types.ts:273 |
+    | `tool/call` | append | 否 | 模型请求的一次工具调用（arguments 是原始 JSON 字符串） | types.ts:279 |
+    | `tool/result` | append | 是 | 工具结果消息，可带 error 标识与 UI 用 meta | types.ts:291 |
+    | `todo/write` | append | 否 | todo 整表快照，latest-wins | types.ts:299 |
+    | `request/header` | append | 否 | 下一次请求的完整头快照，重建请求的依据 | types.ts:304 |
+    | `request/context` | append | 否 | 路由元数据，仅路由或容量变化时记录 | types.ts:309 |
+    | `session/end-seed` | append | 否 | 构造 seed（resume/fork）的结束标记，payload 为空 | types.ts:332 |
+    | `agent/inbox/spliced` | append | 否 | inbox 持久列表的一次规范化 splice | core/agent/src/types.ts:19 |
+    | `approval/asked` | append | 否 | 一次审批询问 | interaction/user-approval/src/index.ts:44 |
+    | `approval/decided` | append | 否 | 审批结论（allow/deny） | interaction/user-approval/src/index.ts:55 |
+    | `approval/policy` | append | 否 | 审批策略快照 | interaction/user-approval/src/index.ts:67 |
+    | `compaction/start` | append | 否 | 压缩事务开始，持锁至 end | compaction/compaction/src/types.ts:23 |
+    | `compaction/summary` | append | 否 | 摘要产物落盘 | compaction/compaction/src/types.ts:33 |
+    | `compaction/end` | append | 否 | 压缩事务结束（可带 error） | compaction/compaction/src/types.ts:71 |
+    | `compaction/prune` | append | 否 | 工具结果裁剪记录 | compaction/compaction/src/types.ts:81 |
+    | `session/title` | append | 否 | 会话标题，latest-wins | session/session-title/src/index.ts:100 |
+    | `llm/retry` | append | 否 | 一次 LLM 重试决策 | llm/llm-retry/src/types.ts:9 |
+    | `llm/retry-started` | append | 否 | LLM 重试开始 | llm/llm-retry/src/types.ts:11 |
+    | `tool/code-dispatch-start` | append | 否 | 代码型工具派发开始 | core/tools/src/types.ts:40 |
+    | `tool/code-dispatch` | append | 否 | 代码型工具派发记录 | core/tools/src/types.ts:56 |
+    | `command/run` | append | 否 | 一次斜杠命令运行 | interaction/commands/src/types.ts:88 |
+    | `command/done` | append | 否 | 斜杠命令完成 | interaction/commands/src/types.ts:95 |
+    | `plan/mode` | append | 否 | plan 模式开关状态 | plan/plan-mode/src/index.ts:53 |
+
+    <h2>Cordis 事件（活调用，不落盘）</h2>
+
+    <p>这些是第 1 章五种派发模式的实际用例；它们不进日志，但 waterfall/serial 链上的决策结果会以 Session 事件的形式留下痕迹。</p>
+
+    | 事件名 | 模式 | 一句话语义 | 挂载/触发位置 |
+    |---|---|---|---|
+    | `tools/pre-execute` | waterfall | 工具执行前闸门；不调 next 即 veto | core/tools/src/index.ts:1475 |
+    | `tools/execute` | waterfall | 包住工具体的执行链（超时策略在此） | core/tools/src/index.ts:1573 |
+    | `agent/pre-step` | waterfall | 步前决策：compaction、上下文注入可改写输入 | core/agent-loop/src/agent.ts:234 |
+    | `agent/turn-stopping` | serial | 轮收尾：监听器用 steer 改写数据而非否决 | core/agent-loop/src/agent.ts:296 |
+    | `llm/stream` | waterfall | 模型调用链；model-visible ⟺ logged 的 invariant 挂在这里 | llm/llm/src/index.ts:924 |
+    | `session/event` | emit | Session 事件提交后的广播：持久化、投影、遥测订阅它 | core/session/src/index.ts:643 |
+    | `internal/config` | waterfall | 插件 config 插值（`!!js` 求值） | vendor/loader/src/index.ts:92 |
+
+    <h2>两条约定</h2>
+
+    <p><strong>Declaration merging 扩展约定：</strong>新事件必须合并到 <code>@deepseek-ai/dsh-session/types</code> 的 <code>SessionEventMap</code>（不是根包）。合入后事件默认是 required-on-read：不认识该类型的构建会拒绝加载日志，除非事件信封携带 <code>ignorable: true</code>。</p>
+
+    <p><strong>SESSION_FORMAT_VERSION = 0 的语义：</strong>预发布阶段日志格式不做任何兼容承诺——后端按版本号拒载异版日志，不提供迁移。加普通事件类型不 bump（由 <code>ignorable</code> 兜底）；只有 header、信封、核心事件语义或 surface 机制这类结构性变更才 bump。</p>
+  </div>
+</Base>
