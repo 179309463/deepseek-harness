@@ -50,7 +50,16 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
       <div class="min-w-0">
         <div class="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink/50">
           <span class="on-accent rounded px-1.5 py-0.5 text-[10px] font-bold" style="color:#fff;-webkit-text-fill-color:#fff">② 精读</span>
-          <button type="button" class="typewriter-replay cursor-pointer border-0 bg-transparent p-0 font-bold text-dora-deep hover:text-dora">逐段讲解</button>
+          <button
+            type="button"
+            class="typewriter-replay ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[8px_11px_9px_12px] border-2 border-dora-deep bg-card px-2 py-0.5 font-bold text-dora-deep shadow-[2px_2px_0_rgba(27,95,170,0.12)] transition-all hover:-translate-y-px hover:bg-mist"
+            title="点击后逐字播放精读说明"
+          >
+            逐段讲解
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+              <path d="M3.2 1.6v8.8L10.4 6 3.2 1.6Z" />
+            </svg>
+          </button>
         </div>
         <div class="prose-atlas typewriter-prose text-[0.95rem]" data-tw="idle">
           <slot />

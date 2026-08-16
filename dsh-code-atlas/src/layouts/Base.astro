@@ -33,7 +33,7 @@ const appendixLinks = [
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content={description} />
     <meta name="color-scheme" content="only light" />
     <meta name="theme-color" content="#faf6ee" />
@@ -46,13 +46,11 @@ const appendixLinks = [
   </head>
   <body class="min-h-screen flex flex-col">
     <header class="sticky top-0 z-40 border-b-2 border-dora-deep bg-paper/95 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5">
-        <a href="/" class="group flex items-center gap-2.5">
-          <span class="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[16px_20px_17px_21px] border-2 border-dora-deep bg-card shadow-[3px_3px_0_rgba(27,95,170,0.16)] transition-transform group-hover:-rotate-6">
-            <img src="/art/mascot.webp" alt="源码图鉴吉祥物：蓝色小机器猫工程师" width="48" height="48" class="h-[3.1rem] w-[3.1rem] object-cover" />
-          </span>
-          <span class="leading-tight">
-            <span class="block text-lg font-extrabold text-dora-deep">DSH 源码图鉴</span>
+      <div class="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 md:gap-4 md:px-4">
+        <a href="/" class="group flex min-w-0 items-center gap-2.5">
+          <img src="/art/mascot.webp" alt="源码图鉴吉祥物：蓝色小机器猫工程师" width="48" height="48" class="h-12 w-12 shrink-0 object-cover transition-transform group-hover:-rotate-6" />
+          <span class="min-w-0 shrink-0 leading-tight">
+            <span class="block whitespace-nowrap text-base font-extrabold text-dora-deep md:text-lg">DSH 源码图鉴</span>
             <span class="hidden text-[11px] font-semibold tracking-wide text-ink/55 md:block">哆啦A梦带队读源码 · 绘本式源码精读</span>
           </span>
         </a>
@@ -101,7 +99,7 @@ const appendixLinks = [
           </a>
         </nav>
         <details class="relative ml-auto md:hidden">
-          <summary class="cursor-pointer rounded-[13px_16px_14px_17px] border-2 border-dora-deep bg-card px-3.5 py-1.5 text-sm font-bold shadow-[3px_3px_0_rgba(27,95,170,0.14)]">
+          <summary class="cursor-pointer whitespace-nowrap rounded-[13px_16px_14px_17px] border-2 border-dora-deep bg-card px-2.5 py-1.5 text-xs font-bold shadow-[3px_3px_0_rgba(27,95,170,0.14)]">
             {currentChapter ? `${currentChapter.num} ${currentChapter.title}` : inAppendix ? '附录' : '章节'}
           </summary>
           <div class="absolute right-0 mt-3 w-56 comic-card p-2">
@@ -143,7 +141,7 @@ const appendixLinks = [
       <div class="mx-auto grid max-w-7xl gap-8 px-4 pt-10 pb-4 md:grid-cols-[1.15fr_1fr_0.85fr]">
         <div>
           <div class="flex items-center gap-3">
-            <img src="/art/mascot.webp" alt="" width="52" height="52" class="h-13 w-13 shrink-0 rounded-[16px_20px_17px_21px] border-2 border-dora-deep bg-paper object-cover shadow-[3px_3px_0_rgba(27,95,170,0.16)]" />
+            <img src="/art/mascot.webp" alt="" width="52" height="52" class="h-13 w-13 shrink-0 object-cover" />
             <div>
               <div class="text-base font-extrabold text-dora-deep">DSH 源码图鉴</div>
               <div class="text-xs font-semibold text-ink/55">一本会讲故事的源码书</div>
@@ -196,7 +194,7 @@ const appendixLinks = [
       />
 
       <div class="border-t-2 border-dora-deep/25 bg-paper">
-        <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-4 text-xs text-ink/60">
+        <div class="site-footer-legal mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-4 text-xs text-ink/60">
           <span>DSH 源码图鉴</span>
           <span aria-hidden="true" class="text-accent">◆</span>
           <span>基于 deepseek-harness 仓库真实源码撰写</span>

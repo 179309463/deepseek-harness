@@ -41,6 +41,10 @@ html {
   scroll-behavior: smooth;
 }
 
+.site-footer-legal {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+
 body {
   position: relative;
   background-color: var(--color-paper);
@@ -827,6 +831,20 @@ body::after {
   font-size: 0.78rem;
   font-weight: 700;
   color: rgba(34, 50, 67, 0.5);
+}
+
+.diagram-duo-note-row {
+  display: none;
+}
+
+@media (min-width: 861px) {
+  .diagram-duo-note-stack {
+    display: none;
+  }
+
+  .diagram-duo-note-row {
+    display: block;
+  }
 }
 
 @media (max-width: 860px) {

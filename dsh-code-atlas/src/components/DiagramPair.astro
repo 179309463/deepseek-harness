@@ -1,15 +1,20 @@
 ---
 interface Props {
-  /** 双图共用的一句对照说明，默认点出左右分工 */
+  /** 宽屏左右对读时的对照说明 */
   note?: string;
+  /** 窄屏上下叠放时的对照说明；未传时若也未传 note，用「上图 / 下图」默认句 */
+  noteStacked?: string;
 }
 
-const { note = '同一件事：左图讲机制，右图讲意象' } = Astro.props;
+const { note, noteStacked } = Astro.props;
+const noteRow = note ?? '同一件事：左图讲机制，右图讲意象';
+const noteCol = noteStacked ?? (note == null ? '同一件事：上图讲机制，下图讲意象' : note);
 ---
 
 <div class="diagram-duo">
   <div class="diagram-duo-stage">
     <slot />
   </div>
-  {note ? <p class="diagram-duo-note">{note}</p> : null}
+  <p class="diagram-duo-note diagram-duo-note-stack">{noteCol}</p>
+  <p class="diagram-duo-note diagram-duo-note-row">{noteRow}</p>
 </div>

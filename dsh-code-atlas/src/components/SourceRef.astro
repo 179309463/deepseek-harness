@@ -10,11 +10,12 @@ const repo = 'https://github.com/deepseek-ai/deepseek-harness/blob/master';
 const href = lines ? `${repo}/${file}#L${lines.replace('-', '-L')}` : `${repo}/${file}`;
 ---
 
-<div class="flex flex-wrap items-center gap-2 text-sm">
-  <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#d5e3f0] bg-mist px-2.5 py-1 font-mono text-xs font-semibold text-dora-deep">
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914Z"/></svg>
-    {file}{lines && <span class="text-accent">:{lines}</span>}
+<div class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+  <span class="flex min-w-0 max-w-full items-start gap-1.5 rounded-lg border border-[#d5e3f0] bg-mist px-2.5 py-1 font-mono text-xs font-semibold text-dora-deep">
+    <svg class="mt-0.5 shrink-0" width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914Z"/></svg>
+    <span class="min-w-0 flex-1 break-all">{file}</span>
+    {lines && <span class="shrink-0 whitespace-nowrap text-accent">:{lines}</span>}
   </span>
-  {symbol && <span class="rounded-lg border border-[#c5d8ea] bg-card px-2.5 py-1 font-mono text-xs font-bold text-dora-deep">{symbol}</span>}
+  {symbol && <span class="shrink-0 rounded-lg border border-[#c5d8ea] bg-card px-2.5 py-1 font-mono text-xs font-bold text-dora-deep">{symbol}</span>}
   <a href={href} target="_blank" rel="noopener" class="text-sm font-semibold text-dora-deep no-underline hover:text-dora">在 GitHub 查看 ↗</a>
 </div>

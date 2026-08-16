@@ -50,12 +50,24 @@ const { title, caption } = Astro.props;
     sequence: { showSequenceNumbers: true, actorMargin: 60 },
   });
 
+  const stackQuery = window.matchMedia('(max-width: 860px)');
+  const zoomCtl = new WeakMap<HTMLElement, () => void>();
+  let seq = 0;
+  let rendering = false;
+  let rerun = false;
+
   // Astro/MDX 会把图源里的 <br/> 解析成真正的 <br> 元素，textContent 取不到换行，标签文字会粘成一团；
   // 还原成字面量 `<br/>`，mermaid 在 htmlLabels 下自己把它当换行处理。
   function readSource(source: Element): string {
     const clone = source.cloneNode(true) as Element;
     for (const br of clone.querySelectorAll('br')) br.replaceWith('<br/>');
     return clone.textContent?.trim() ?? '';
+  }
+
+  // 窄屏把横向 flowchart 改成自上而下，否则节点被压成一条细带，字看不清。
+  function orientForViewport(code: string): string {
+    if (!stackQuery.matches) return code;
+    return code.replace(/^(flowchart|graph)\s+LR\b/m, '$1 TB');
   }
 
   // mermaid 默认带死宽高，容器一变就会裁切。先剥掉固有尺寸，后面按容器再算缩放。
@@ -95,12 +107,15 @@ const { title, caption } = Astro.props;
 
   // 所有 UML 都按容器适应宽高；缩放条在标题右侧。zoom=1 表示刚好铺满当前可视区域。
   function bindZoom(frame: HTMLElement, target: HTMLElement): void {
+    zoomCtl.get(frame)?.();
     const svg = target.querySelector<SVGSVGElement>('svg');
-    if (!svg || frame.querySelector('.mermaid-zoom-bar')) return;
+    if (!svg) return;
 
     const nativeW = svg.viewBox.baseVal.width || svg.getBoundingClientRect().width;
     const nativeH = svg.viewBox.baseVal.height || svg.getBoundingClientRect().height;
     let zoom = 1;
+    const ac = new AbortController();
+    const { signal } = ac;
 
     const bar = document.createElement('div');
     bar.className = 'mermaid-zoom-bar';
@@ -151,7 +166,7 @@ const { title, caption } = Astro.props;
       const scrim = document.createElement('div');
       scrim.id = 'mermaid-zoom-scrim';
       scrim.className = 'mermaid-zoom-scrim';
-      scrim.addEventListener('click', closeExpand);
+      scrim.addEventListener('click', closeExpand, { signal });
       document.body.append(scrim);
       document.body.style.overflow = 'hidden';
       frame.classList.add('is-expanded');
@@ -160,18 +175,22 @@ const { title, caption } = Astro.props;
       requestAnimationFrame(apply);
     };
 
-    bar.addEventListener('click', (event) => {
-      const btn = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
-      if (!btn) return;
-      const act = btn.dataset.act;
-      if (act === 'in') setZoom(zoom + 0.25);
-      else if (act === 'out') setZoom(zoom - 0.25);
-      else if (act === 'fit') setZoom(1);
-      else if (act === 'expand') {
-        if (frame.classList.contains('is-expanded')) closeExpand();
-        else openExpand();
-      }
-    });
+    bar.addEventListener(
+      'click',
+      (event) => {
+        const btn = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
+        if (!btn) return;
+        const act = btn.dataset.act;
+        if (act === 'in') setZoom(zoom + 0.25);
+        else if (act === 'out') setZoom(zoom - 0.25);
+        else if (act === 'fit') setZoom(1);
+        else if (act === 'expand') {
+          if (frame.classList.contains('is-expanded')) closeExpand();
+          else openExpand();
+        }
+      },
+      { signal },
+    );
 
     target.addEventListener(
       'wheel',
@@ -180,38 +199,72 @@ const { title, caption } = Astro.props;
         event.preventDefault();
         setZoom(zoom + (event.deltaY < 0 ? 0.25 : -0.25));
       },
-      { passive: false },
+      { passive: false, signal },
     );
 
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && frame.classList.contains('is-expanded')) closeExpand();
-    });
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key === 'Escape' && frame.classList.contains('is-expanded')) closeExpand();
+      },
+      { signal },
+    );
 
     const ro = new ResizeObserver(() => apply());
     ro.observe(target);
     ro.observe(frame);
     requestAnimationFrame(apply);
+
+    zoomCtl.set(frame, () => {
+      ac.abort();
+      ro.disconnect();
+      bar.remove();
+      frame.classList.remove('is-expanded');
+      document.getElementById('mermaid-zoom-scrim')?.remove();
+      document.body.style.removeProperty('overflow');
+    });
+  }
+
+  async function renderAll(): Promise<void> {
+    if (rendering) {
+      rerun = true;
+      return;
+    }
+    rendering = true;
+    try {
+      for (const frame of document.querySelectorAll<HTMLElement>('.mermaid-frame')) {
+        const source = frame.querySelector('.mermaid-source');
+        const target = frame.querySelector<HTMLElement>('.mermaid-render');
+        if (!source || !target) continue;
+        const raw = readSource(source);
+        if (!raw) continue;
+        const code = orientForViewport(raw);
+        if (frame.dataset.mmdCode === code && target.querySelector('svg')) continue;
+        zoomCtl.get(frame)?.();
+        try {
+          const { svg } = await mermaid.render(`atlas-mmd-${seq++}`, code);
+          target.innerHTML = svg;
+          frame.dataset.mmdCode = code;
+          fixSize(target);
+          fixSequenceBadges(target);
+          bindZoom(frame, target);
+        } catch (err) {
+          target.innerHTML = `<p style="color:#e5534b;font-size:0.85rem">图表渲染失败：${String(err)}</p>`;
+        }
+      }
+    } finally {
+      rendering = false;
+      if (rerun) {
+        rerun = false;
+        await renderAll();
+      }
+    }
   }
 
   // 渲染必须留在异步 IIFE 里，不能用顶层 await：生产构建下 mermaid 懒加载的图表 chunk 会反向 import
   // 本脚本所在的入口 chunk，若入口模块的顶层 await 未结束，那些 chunk 就永远无法求值，双方死锁。
-  void (async () => {
-    let seq = 0;
-    for (const frame of document.querySelectorAll<HTMLElement>('.mermaid-frame')) {
-      const source = frame.querySelector('.mermaid-source');
-      const target = frame.querySelector('.mermaid-render');
-      if (!source || !target) continue;
-      const code = readSource(source);
-      if (!code) continue;
-      try {
-        const { svg } = await mermaid.render(`atlas-mmd-${seq++}`, code);
-        target.innerHTML = svg;
-        fixSize(target);
-        fixSequenceBadges(target);
-        bindZoom(frame, target);
-      } catch (err) {
-        target.innerHTML = `<p style="color:#e5534b;font-size:0.85rem">图表渲染失败：${String(err)}</p>`;
-      }
-    }
-  })();
+  void renderAll();
+  stackQuery.addEventListener('change', () => {
+    void renderAll();
+  });
 </script>
