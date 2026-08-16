@@ -11,7 +11,7 @@ pnpm build    # 输出静态站到 dist/
 pnpm preview  # 本地预览构建产物
 ```
 
-## 目录
+## 目录1
 
 ```
 research/          源码研究笔记（写作素材，不参与构建）
