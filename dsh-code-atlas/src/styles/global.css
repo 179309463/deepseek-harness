@@ -284,6 +284,12 @@ body::after {
   padding: 0.1em 0.4em;
   font-size: 0.88em;
   font-family: var(--font-mono);
+  /* 长路径没有空格，默认不折会把整页撑出横向滚动 */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .prose-atlas table {
@@ -546,11 +552,21 @@ body::after {
 }
 
 .chapter-hero h1 {
-  margin-top: 0.6rem;
+  margin-top: 0.35rem;
 }
 
 .chapter-hero p {
-  margin-top: 1rem;
+  margin-top: 0.45rem;
+}
+
+@media (min-width: 768px) {
+  .chapter-hero h1 {
+    margin-top: 0.6rem;
+  }
+
+  .chapter-hero p {
+    margin-top: 1rem;
+  }
 }
 
 /* Mermaid 容器：纸卡 + 手绘边 + 顶部胶带 */
@@ -566,6 +582,74 @@ body::after {
   padding: 1.3rem 1.2rem 1.1rem;
   margin: 1.6rem 0;
   overflow: hidden;
+}
+
+/* 首页分层条：窄屏自上而下，md 起自左向右 */
+.layer-flow-track {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.layer-flow-step {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.layer-flow-card {
+  width: 100%;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border: 1px solid #b7d0e6;
+  border-radius: 8px;
+  background: #eef4fa;
+  color: #222;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.layer-flow-arrow {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: #2b9fe3;
+}
+
+.layer-flow-arrow::before {
+  content: "↓";
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@media (min-width: 768px) {
+  .layer-flow-track {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .layer-flow-step {
+    flex: 1;
+    flex-direction: row;
+  }
+
+  .layer-flow-arrow {
+    width: 1.6rem;
+    height: auto;
+    align-self: stretch;
+  }
+
+  .layer-flow-arrow::before {
+    content: "→";
+  }
 }
 
 .mermaid-render {

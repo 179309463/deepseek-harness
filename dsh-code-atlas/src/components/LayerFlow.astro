@@ -1,0 +1,43 @@
+---
+interface Layer {
+  title: string;
+  chapters: string;
+  paths: string[];
+}
+
+const layers: Layer[] = [
+  { title: 'Cordis 内核', chapters: '第 1、2 章', paths: ['vendor/cordis', 'vendor/loader'] },
+  { title: '产品脊柱', chapters: '第 4、5 章', paths: ['core/agent-loop', 'core/session', 'core/tools'] },
+  { title: '能力层', chapters: '第 3、7、8 章', paths: ['shell seam', 'subagent seam', 'compaction', 'tool-cordis'] },
+  { title: '协议与装配层', chapters: '第 6、9 章', paths: ['packages/acp', 'packages/sdk', 'boot/app-boot'] },
+];
+---
+
+<figure class="mermaid-frame layer-flow">
+  <figcaption class="mermaid-head">
+    <span class="mermaid-title">
+      <span class="inline-block h-3 w-3 shrink-0 rounded-full bg-accent"></span>
+      dsh 架构分层与章节对照
+    </span>
+  </figcaption>
+  <ol class="layer-flow-track">
+    {layers.map((layer, i) => (
+      <li class="layer-flow-step">
+        {i > 0 && <span class="layer-flow-arrow" aria-hidden="true"></span>}
+        <div class="layer-flow-card">
+          <strong class="block text-[0.95rem] font-extrabold text-ink">{layer.title}</strong>
+          <span class="mt-1 block text-sm text-ink/80">{layer.chapters}</span>
+          {layer.paths.map((path) => (
+            <span class="mt-0.5 block font-mono text-xs text-ink/70">{path}</span>
+          ))}
+        </div>
+      </li>
+    ))}
+  </ol>
+  <p class="mermaid-caption mt-3 text-center text-sm text-ink/60 md:hidden">
+    从上往下读：Cordis 内核是地基，产品脊柱是主干，能力 seam 是装备，协议层是对外的桥；箭头指向依赖它的那一层
+  </p>
+  <p class="mermaid-caption mt-3 hidden text-center text-sm text-ink/60 md:block">
+    从左往右读：Cordis 内核是地基，产品脊柱是主干，能力 seam 是装备，协议层是对外的桥；箭头指向依赖它的那一层
+  </p>
+</figure>

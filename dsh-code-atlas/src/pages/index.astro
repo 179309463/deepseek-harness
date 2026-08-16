@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import MermaidDiagram from '../components/MermaidDiagram.astro';
+import LayerFlow from '../components/LayerFlow.astro';
 
 const chapters = [
   { slug: '01-plugin-universe', num: '01', title: '插件宇宙观', desc: 'Context、Fiber、effect/dispose、事件总线：一切皆插件的世界如何运转', files: 'vendor/cordis/src/*', alt: '发光的水晶内核与围绕它的插件小方块' },
@@ -58,14 +58,7 @@ const chapters = [
   </section>
 
   <h2 class="section-title mb-4 text-2xl font-extrabold">全站源码地图</h2>
-  <MermaidDiagram title="dsh 架构分层与章节对照" caption="从左往右读：Cordis 内核是地基，产品脊柱是主干，能力 seam 是装备，协议层是对外的桥；箭头指向依赖它的那一层">
-    flowchart LR
-      L0["Cordis 内核<br/>第 1、2 章<br/>vendor/cordis<br/>vendor/loader"]
-      L1["产品脊柱<br/>第 4、5 章<br/>core/agent-loop<br/>core/session<br/>core/tools"]
-      L2["能力层<br/>第 3、7、8 章<br/>shell seam<br/>subagent seam<br/>compaction<br/>tool-cordis"]
-      L3["协议与装配层<br/>第 6、9 章<br/>packages/acp<br/>packages/sdk<br/>boot/app-boot"]
-      L0 --> L1 --> L2 --> L3
-  </MermaidDiagram>
+  <LayerFlow />
 
   <h2 class="section-title section-title-accent mb-4 mt-14 text-2xl font-extrabold">九章之旅</h2>
   <p class="mb-6 max-w-2xl text-sm text-ink/60">每章都配一张手绘特色插图，先用一幅画记住机制，再进去读代码。</p>

@@ -53,7 +53,7 @@ const appendixLinks = [
           </span>
           <span class="leading-tight">
             <span class="block text-lg font-extrabold text-dora-deep">DSH 源码图鉴</span>
-            <span class="block text-[11px] font-semibold tracking-wide text-ink/55">哆啦A梦带队读源码 · 绘本式源码精读</span>
+            <span class="hidden text-[11px] font-semibold tracking-wide text-ink/55 md:block">哆啦A梦带队读源码 · 绘本式源码精读</span>
           </span>
         </a>
         <nav class="ml-auto hidden items-center gap-1.5 md:flex" aria-label="章节导航">
@@ -132,7 +132,7 @@ const appendixLinks = [
       <div class="h-[4px] bg-gradient-to-r from-dora via-accent to-mint"></div>
     </header>
 
-    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
+    <main class="mx-auto w-full min-w-0 max-w-7xl flex-1 overflow-x-clip px-4 py-8">
       <slot />
     </main>
 

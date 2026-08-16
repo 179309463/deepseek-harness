@@ -31,7 +31,7 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
           <span class="rounded bg-dora px-1.5 py-0.5 text-[10px] font-bold" style="color:#fff;-webkit-text-fill-color:#fff">① 源码</span>
           先读这段真实代码
         </div>
-        <div class="code-frame" data-wrap="on" style={`--line-start: ${lineStart}`}>
+        <div class="code-frame" data-wrap="off" style={`--line-start: ${lineStart}`}>
           <div class="flex items-center gap-1.5 border-b border-[#e4eef6] bg-[#eaeff5] px-3 py-1.5">
             <span class="h-2.5 w-2.5 rounded-full bg-[#ff5f57]"></span>
             <span class="h-2.5 w-2.5 rounded-full bg-[#febc2e]"></span>
@@ -40,9 +40,9 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
             <button
               type="button"
               class="code-wrap-toggle ml-auto shrink-0 cursor-pointer rounded-[7px_9px_7px_9px] border border-dora-deep/25 bg-card px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink/55 transition-colors hover:border-dora-deep/55 hover:text-dora-deep"
-              aria-pressed="true"
-              title="关掉后长行不再折行，改由代码窗横向滚动"
-            >自动换行：开</button>
+              aria-pressed="false"
+              title="打开后长行在窗内折行；默认关闭，长行由代码窗横向滚动"
+            >自动换行：关</button>
           </div>
           <slot name="code" />
         </div>
@@ -50,9 +50,9 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
       <div class="min-w-0">
         <div class="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink/50">
           <span class="on-accent rounded px-1.5 py-0.5 text-[10px] font-bold" style="color:#fff;-webkit-text-fill-color:#fff">② 精读</span>
-          <button type="button" class="typewriter-replay cursor-pointer border-0 bg-transparent p-0 font-bold text-dora-deep hover:text-dora">再读逐段讲解</button>
+          <button type="button" class="typewriter-replay cursor-pointer border-0 bg-transparent p-0 font-bold text-dora-deep hover:text-dora">逐段讲解</button>
         </div>
-        <div class="prose-atlas typewriter-prose text-[0.95rem]" data-tw="pending">
+        <div class="prose-atlas typewriter-prose text-[0.95rem]" data-tw="idle">
           <slot />
         </div>
       </div>
@@ -200,36 +200,9 @@ const lineStart = lines ? Math.max(0, parseInt(lines.split('-')[0], 10) - 1) : 0
 
   function replay(el: HTMLElement) {
     gens.set(el, (gens.get(el) ?? 0) + 1);
+    if (!el.querySelector('.tw-ch')) wrapText(el);
     reset(el);
-    el.dataset.tw = 'pending';
     play(el);
-  }
-
-  const roots = document.querySelectorAll<HTMLElement>('.typewriter-prose');
-  if (reduceMotion) {
-    for (const el of roots) el.dataset.tw = 'done';
-  } else {
-    for (const el of roots) {
-      wrapText(el);
-      markBlocks(el);
-      el.dataset.tw = 'pending';
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const el = entry.target as HTMLElement;
-          if (el.dataset.tw !== 'pending') continue;
-          io.unobserve(el);
-          window.setTimeout(() => {
-            if (el.dataset.tw !== 'pending') return;
-            play(el);
-          }, 500);
-        }
-      },
-      { threshold: 0.45, rootMargin: '0px 0px -12% 0px' },
-    );
-    for (const el of roots) io.observe(el);
   }
 
   document.querySelectorAll<HTMLButtonElement>('.typewriter-replay').forEach((btn) => {
