@@ -281,6 +281,8 @@ body::after {
 }
 
 .prose-atlas code:not(pre code) {
+  display: inline-flex;
+  align-items: center;
   background: var(--color-mist);
   color: var(--color-dora-deep);
   border: 1px solid rgba(43, 159, 227, 0.28);
@@ -288,6 +290,8 @@ body::after {
   padding: 0.1em 0.4em;
   font-size: 0.88em;
   font-family: var(--font-mono);
+  line-height: 1.25;
+  vertical-align: middle;
   /* 长路径没有空格，默认不折会把整页撑出横向滚动 */
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -373,13 +377,16 @@ body::after {
   }
 
   .prose-atlas td {
-    display: grid;
-    grid-template-columns: 5.6em minmax(0, 1fr);
-    align-items: start;
-    column-gap: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.2em;
+    row-gap: 0.12em;
+    position: relative;
     border: none;
     border-bottom: 1px solid var(--color-line);
-    padding: 0.4rem 0.7rem;
+    padding: 0.38rem 0.7rem 0.38rem 6.5rem;
+    vertical-align: middle;
   }
 
   .prose-atlas td:first-child {
@@ -392,13 +399,24 @@ body::after {
 
   .prose-atlas td::before {
     content: attr(data-label);
+    position: absolute;
+    left: 0.7rem;
+    top: 50%;
+    width: 5.5rem;
     margin: 0;
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     font-weight: 800;
-    letter-spacing: 0.02em;
-    line-height: 1.45;
+    letter-spacing: 0;
+    line-height: 1.35;
     color: var(--color-dora-deep);
-    white-space: nowrap;
+    transform: translateY(-50%);
+  }
+
+  .prose-atlas td code:not(pre code) {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    line-height: 1.25;
   }
 }
 
