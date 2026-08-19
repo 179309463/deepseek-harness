@@ -1,0 +1,78 @@
+[Script Info]
+Title: 如果 agent 是一只哆啦A梦 - 第01集
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: Main,Noto Sans CJK SC Medium,50,&H00FFFFFF,&H000000FF,&HDC17264A,&H780B1630,0,0,0,0,100,100,0,0,1,3,1,2,75,75,210,1
+Style: Narr,Noto Sans CJK SC Medium,48,&H00FFFFFF,&H000000FF,&HDC17264A,&H780B1630,0,0,0,0,100,100,0,0,1,3,1,1,85,85,210,1
+Style: Tech,Noto Sans Mono CJK SC,40,&H00E8F5FF,&H000000FF,&H00222222,&H961E1E2E,0,0,0,0,100,100,0,0,1,2,1,8,80,80,150,1
+Style: Title,Noto Sans CJK SC Bold,58,&H00FFFFFF,&H000000FF,&H00222222,&H00000000,1,0,0,0,100,100,0,0,1,2,0,8,65,65,180,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 2,0:00:00.96,0:00:04.72,Narr,,0,0,0,,如果一个 agent，\N也有一只四次元口袋呢？
+Dialogue: 2,0:00:08.96,0:00:12.10,Narr,,0,0,0,,每个团队，都有一座祖传屎山。
+Dialogue: 2,0:00:12.14,0:00:15.62,Narr,,0,0,0,,大雄第一天上班，\N就拿到了钥匙。
+Dialogue: 2,0:00:18.26,0:00:24.12,Narr,,0,0,0,,三千行代码缠成一团的\N祖传单体 agent——铁雄一号。
+Dialogue: 2,0:00:28.00,0:00:31.10,Main,,0,0,0,,老师：明天之前，\N给它加上网页搜索能力！
+Dialogue: 2,0:00:31.20,0:00:32.20,Main,,0,0,0,,大雄：明、明天？
+Dialogue: 2,0:00:32.40,0:00:35.80,Main,,0,0,0,,老师：这是第一次交付。\N别让我失望。
+Dialogue: 2,0:00:40.20,0:00:46.60,Main,,0,0,0,,大雄：这坨代码，\N连主循环长在哪都找不到……
+Dialogue: 2,0:00:49.00,0:00:52.30,Main,,0,0,0,,小夫：我上周用 XX 框架，\N十分钟就做出了 demo！
+Dialogue: 2,0:00:52.40,0:00:54.50,Main,,0,0,0,,小夫：换个框架，重写不就行了？
+Dialogue: 2,0:00:54.60,0:00:56.60,Main,,0,0,0,,大雄：可三个月后，\N需求又变了呢？
+Dialogue: 2,0:00:58.00,0:01:01.80,Main,,0,0,0,,胖虎：磨叽什么，直接把搜索代码\N塞进去不就完了！
+Dialogue: 2,0:01:01.90,0:01:04.30,Main,,0,0,0,,大雄：它已经动一处、\N崩三处了！
+Dialogue: 2,0:01:04.40,0:01:06.10,Main,,0,0,0,,胖虎：那就多塞几处！
+Dialogue: 2,0:01:10.00,0:01:16.80,Narr,,0,0,0,,推倒重来，付不起迁移成本；\N硬改源码，只会留下技术债。
+Dialogue: 2,0:01:19.20,0:01:20.10,Main,,0,0,0,,老师：明天之前。
+Dialogue: 2,0:01:24.00,0:01:28.60,Main,,0,0,0,,大雄：难道只能重写吗……
+Dialogue: 2,0:01:31.40,0:01:32.80,Main,,0,0,0,,大雄：哆、哆啦A梦？！
+Dialogue: 2,0:01:33.00,0:01:37.80,Main,,0,0,0,,哆啦A梦：你不是缺一段搜索代码。\N你是缺一个能装能力的口袋。
+Dialogue: 2,0:01:41.00,0:01:45.10,Main,,0,0,0,,哆啦A梦：问题不在你的代码，\N在于你的框架没有“口袋”。
+Dialogue: 2,0:01:45.30,0:01:49.90,Main,,0,0,0,,哆啦A梦：能力是长在口袋里的，\N不是焊死在身体里的。
+Dialogue: 2,0:01:50.00,0:01:51.50,Main,,0,0,0,,大雄：口袋里……\N能装下一个框架？
+Dialogue: 2,0:01:53.20,0:01:57.60,Main,,0,0,0,,哆啦A梦：一行命令，\N先跑起来看看。
+Dialogue: 1,0:01:55.50,0:02:01.20,Tech,,0,0,0,,\N$ npx @deepseek-ai/dsh web
+Dialogue: 2,0:02:06.00,0:02:07.60,Main,,0,0,0,,大雄：真的跑起来了！
+Dialogue: 2,0:02:07.80,0:02:13.20,Main,,0,0,0,,哆啦A梦：同一套内核，还能接 TUI、\NHeadless、ACP、JSON-RPC SDK 和 Python SDK。
+Dialogue: 1,0:02:06.80,0:02:13.20,Tech,,0,0,0,,$ npx @deepseek-ai/dsh web\N✓ Web UI 已启动  http://127.0.0.1:3080
+Dialogue: 2,0:02:17.20,0:02:23.80,Main,,0,0,0,,哆啦A梦：大模型只是引擎。Harness 负责接工具、\N管上下文、组织执行，让它真正开起来。
+Dialogue: 2,0:02:26.00,0:02:29.50,Main,,0,0,0,,大雄：所以 Claude Code、Codex 里面\N都藏着一套 harness？
+Dialogue: 2,0:02:29.60,0:02:34.50,Main,,0,0,0,,出木杉：没错。而 deepseek-harness\N是把这套底座单独开源出来。
+Dialogue: 2,0:02:38.00,0:02:44.00,Main,,0,0,0,,哆啦A梦：第一件事，Loop。\N它决定 agent 如何一轮轮推进任务。
+Dialogue: 2,0:02:49.00,0:02:56.20,Main,,0,0,0,,哆啦A梦：第二件事，Tools。它们是 agent\N读写文件、执行命令、搜索网页的手和脚。
+Dialogue: 2,0:03:01.00,0:03:07.80,Main,,0,0,0,,哆啦A梦：第三件事，Session。它记住发生过的一切，\N让下一步思考有据可依。
+Dialogue: 2,0:03:12.00,0:03:19.70,Narr,,0,0,0,,旁白：deepseek-harness 的答案是——\N这三件事，连同所有零件，全部是插件。
+Dialogue: 1,0:03:15.40,0:03:20.00,Tech,,0,0,0,,core/agent-loop   core/tools   core/session
+Dialogue: 2,0:03:20.00,0:03:22.50,Main,,0,0,0,,大雄：等等，连主循环都\N不是特权内核？
+Dialogue: 2,0:03:24.00,0:03:27.80,Main,,0,0,0,,大雄：连循环都能换？！\N那什么东西是不能换的？
+Dialogue: 2,0:03:28.00,0:03:32.00,Main,,0,0,0,,哆啦A梦：只有装插件的“口袋”本身——\NCordis 内核。
+Dialogue: 2,0:03:34.00,0:03:36.50,Main,,0,0,0,,胖虎：焊枪才是男人的浪漫！
+Dialogue: 2,0:03:37.00,0:03:40.80,Main,,0,0,0,,哆啦A梦：浪漫不能当 CI 通过率。
+Dialogue: 2,0:03:46.00,0:03:52.00,Main,,0,0,0,,哆啦A梦：插件通过配置层挂载，\N不需要改 harness 源码。
+Dialogue: 2,0:03:52.10,0:03:55.00,Main,,0,0,0,,大雄：所以能力能加，\N也能干净地撤销。
+Dialogue: 1,0:03:46.00,0:03:55.00,Tech,,0,0,0,,cordis.yml
+Dialogue: 2,0:03:57.00,0:04:02.20,Narr,,0,0,0,,旁白：一切 agent 能力由插件提供，\N通过 Cordis 的服务与事件彼此协作。
+Dialogue: 2,0:04:02.40,0:04:08.40,Main,,0,0,0,,哆啦A梦：Cordis 内核不承载任何 agent 具体能力——\N它只管理插件的时空位置。
+Dialogue: 2,0:04:10.00,0:04:16.50,Main,,0,0,0,,出木杉：VS Code 的插件也有依赖声明，\N但几乎没人用；dsh 把这件事做成了地基。
+Dialogue: 1,0:04:11.00,0:04:19.00,Tech,,0,0,0,,inject  →  按依赖顺序挂载\N运行中动态挂载／卸载，系统不重启
+Dialogue: 2,0:04:22.00,0:04:27.20,Main,,0,0,0,,出木杉：Cordis 为持续被修改、\N甚至自我修改的系统而生。
+Dialogue: 1,0:04:20.80,0:04:30.20,Tech,,0,0,0,,《A Programming Paradigm for Spatiotemporal Composability》\Nvendor/README.md
+Dialogue: 2,0:04:34.00,0:04:40.30,Narr,,0,0,0,,旁白：记住一句话：想加能力，\N写插件挂配置，别改 loop。
+Dialogue: 1,0:04:33.50,0:04:41.80,Tech,,0,0,0,,github.com/deepseek-ai/deepseek-harness\Npnpm install && pnpm run build && pnpm dsh web\Ndocs/architecture.md  +  docs/cordis-primer.md
+Dialogue: 2,0:04:44.00,0:04:51.00,Narr,,0,0,0,,旁白：DeepSeek Harness 当前处于 Developer Preview，\N适合试点，暂不适合直接上生产核心链路。
+Dialogue: 2,0:04:55.00,0:04:58.50,Main,,0,0,0,,大雄：搜索能力上线，\N原来的 loop 没动，会话也没断。
+Dialogue: 2,0:04:59.00,0:05:00.50,Main,,0,0,0,,老师：第一次交付，通过。
+Dialogue: 2,0:05:00.60,0:05:03.50,Main,,0,0,0,,哆啦A梦：加能力，\N不该是一场手术。
+Dialogue: 2,0:05:05.00,0:05:08.00,Main,,0,0,0,,大雄：这个口袋……到底是怎么\N装下整个世界的？
+Dialogue: 2,0:05:08.40,0:05:11.60,Main,,0,0,0,,哆啦A梦：下一集，\N我把口袋翻过来给你看。
+Dialogue: 2,0:05:13.00,0:05:18.80,Narr,,0,0,0,,下集｜四次元口袋的秘密——Cordis 内核：\N插件的加载、卸载、依赖与可逆副作用。
+Dialogue: 1,0:05:14.00,0:05:19.00,Tech,,0,0,0,,Context   inject   ctx.effect()   类型化事件
+Dialogue: 0,0:00:00.00,0:00:05.00,Title,,0,0,0,,如果 agent 是一只哆啦A梦
+Dialogue: 0,0:05:14.50,0:05:19.00,Title,,0,0,0,,本集完
